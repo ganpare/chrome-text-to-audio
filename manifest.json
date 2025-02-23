@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Kokoro TTS Reader",
+  "version": "1.0.0",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "https://queue.fal.run/*",
+    "https://fal.media/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["contentScript.js"],
+    "run_at": "document_start"
+  }],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
+}
