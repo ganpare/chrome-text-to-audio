@@ -215,37 +215,59 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
       console.log('Audio URL received:', formatUrl(audioUrl));
       
-      // Try to send to content script
+      // コンテキストメニューから直接タブ情報を使用
+      if (!tab?.id) {
+        throw new Error('コンテキストメニューが呼び出されたタブの情報が取得できません');
+      }
+
+      // タブの状態を確認
       try {
-        console.log('Sending PING to content script');
-        await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+        const tabInfo = await chrome.tabs.get(tab.id);
+        console.log('Tab info:', tabInfo);
         
-        console.log('Sending audio URL to content script');
-        await chrome.tabs.sendMessage(tab.id, {
+        if (!tabInfo?.url || (!tabInfo.url.startsWith('http') && !tabInfo.url.startsWith('https'))) {
+          throw new Error('このページでは音声再生を実行できません');
+        }
+      } catch (error) {
+        console.error('Failed to get tab info:', error);
+        throw new Error('タブ情報の取得に失敗しました: ' + error.message);
+      }
+
+      // コンテンツスクリプトの準備と音声再生
+      try {
+        console.log('Attempting to ping content script in tab:', tab.id);
+        try {
+          await chrome.tabs.sendMessage(tab.id, { type: "PING" });
+          console.log('Content script is already loaded');
+        } catch (error) {
+          console.log('Content script not loaded, injecting...', error);
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['contentScript.js']
+          });
+          console.log('Content script injection successful');
+          // 初期化のための待機
+          await wait(500);
+        }
+
+        // 音声再生を試行
+        console.log('Attempting to play audio in tab:', tab.id);
+        const response = await chrome.tabs.sendMessage(tab.id, {
           action: "playAudio",
           url: audioUrl
         });
-      } catch (error) {
-        console.error('Content script communication error:', error);
-        console.log('Attempting to inject content script');
         
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['contentScript.js']
-        });
-        
-        // Wait and retry
-        await wait(500);
-        try {
-          console.log('Retrying audio playback after content script injection');
-          await chrome.tabs.sendMessage(tab.id, {
-            action: "playAudio",
-            url: audioUrl
-          });
-        } catch (retryError) {
-          console.error('Retry failed:', retryError);
-          await showErrorMessage('音声の再生に失敗しました。ページを更新して再試行してください。');
+        console.log('Playback response:', response);
+        if (response?.status === "waiting_for_interaction") {
+          console.log('Waiting for user interaction to play audio');
+        } else if (response?.status === "playing") {
+          console.log('Audio playback started successfully');
+        } else if (response?.status === "error") {
+          throw new Error('音声の再生に失敗しました: ' + (response.error || '不明なエラー'));
         }
+      } catch (error) {
+        console.error('Playback error:', error);
+        throw new Error('音声の再生に失敗しました: ' + error.message);
       }
     } catch (error) {
       const errorDetails = {
