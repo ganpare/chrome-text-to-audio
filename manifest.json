@@ -13,6 +13,11 @@
     "https://queue.fal.run/*",
     "https://fal.media/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'",
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals",
+    "content_scripts": "media-src 'self' blob: https://fal.media/* data:"
+  },
   "background": {
     "service_worker": "background.js"
   },
