@@ -78,29 +78,34 @@ async function pollStatus(statusUrl, responseUrl, apiKey, maxAttempts = 30) {
       const status = await response.json();
       if (status.status === 'COMPLETED') {
         return await getResponseResult(responseUrl, apiKey);
-      } else if (status.status === 'FAILED') {
-        throw new Error('処理が失敗しました: ' + (status.error || '不明なエラー'));
       }
     } catch (error) {
-      console.error('Error during status check:', error);
+      console.error('Error in pollStatus:', error);
       throw error;
     }
 
     await wait(1000);
   }
-  throw new Error('タイムアウト: 処理が完了しませんでした');
+
+  throw new Error('Polling exceeded maximum attempts');
 }
 
-// Setup context menu
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "kokoroTTS-read",
-    title: "選択テキストをKokoroTTSで読み上げ",
-    contexts: ["selection"]
+// コンテキストメニューの作成
+function createContextMenu() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "kokoroTTS-read",
+      title: "選択テキストをKokoroTTSで読み上げ",
+      contexts: ["selection"]
+    });
   });
-});
+}
 
-// Handle context menu clicks
+// 拡張機能のインストール時とChrome起動時にメニューを作成
+chrome.runtime.onInstalled.addListener(createContextMenu);
+chrome.runtime.onStartup.addListener(createContextMenu);
+
+// コンテキストメニューのクリックイベント処理
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "kokoroTTS-read" && info.selectionText) {
     const apiKey = await getFalApiKey();
@@ -162,7 +167,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       } catch {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
-          files: ['contentScript.js']
+          files: ['dbHelper.js', 'contentScript.js']
         });
         await wait(500);
       }
@@ -170,7 +175,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       // 音声再生を試行
       const responseMessage = await chrome.tabs.sendMessage(tab.id, {
         action: "playAudio",
-        url: audioUrl
+        url: audioUrl,
+        text: info.selectionText
       });
 
       if (responseMessage?.status !== "playing") {

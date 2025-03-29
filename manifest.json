@@ -6,7 +6,8 @@
     "contextMenus",
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -23,7 +24,7 @@
   },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["contentScript.js"],
+    "js": ["dbHelper.js", "contentScript.js"],
     "run_at": "document_start"
   }],
   "options_ui": {

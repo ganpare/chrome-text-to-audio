@@ -1,6 +1,7 @@
 // グローバル変数
 let currentAudio = null;
 let playbackState = 'idle'; // idle, loading, playing, error
+const db = new AudioDatabase();
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -22,7 +23,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // 音声再生リクエストの処理
   if (request.action === "playAudio" && request.url) {
-    handleAudioPlayback(request.url)
+    handleAudioPlayback(request.url, request.text)
       .then(result => {
         sendResponse(result);
       })
@@ -37,7 +38,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // 音声再生を処理する関数
-async function handleAudioPlayback(url) {
+async function handleAudioPlayback(url, originalText) {
   try {
     // 既存の音声の停止
     if (currentAudio) {
@@ -73,7 +74,7 @@ async function handleAudioPlayback(url) {
           })
           .catch(error => {
             console.warn('Auto-play failed, showing play button:', error);
-            showPlayButton(audio, resolve);
+            showPlayButton(audio, resolve, originalText);
           });
       };
 
@@ -105,13 +106,21 @@ async function handleAudioPlayback(url) {
         reject(new Error(errorMessage));
       };
 
-      // URLをBlobに変換して再生
+      // URLをBlobに変換して再生と保存
       fetch(url)
         .then(response => response.blob())
-        .then(blob => {
+        .then(async blob => {
           const blobUrl = URL.createObjectURL(blob);
           audio.src = blobUrl;
           currentAudio = audio;
+
+          // 音声データを保存
+          try {
+            await db.saveAudio(blob, originalText);
+            console.log('Audio saved to database');
+          } catch (error) {
+            console.error('Failed to save audio:', error);
+          }
         })
         .catch(error => {
           reject(new Error('音声ファイルの取得に失敗しました: ' + error.message));
@@ -123,7 +132,7 @@ async function handleAudioPlayback(url) {
 }
 
 // 再生ボタンを表示する関数
-function showPlayButton(audio, resolve) {
+function showPlayButton(audio, resolve, originalText) {
   const container = document.createElement('div');
   container.style.cssText = `
     position: fixed;
@@ -150,6 +159,17 @@ function showPlayButton(audio, resolve) {
     border-radius: 3px;
   `;
 
+  const saveButton = document.createElement('button');
+  saveButton.textContent = '保存';
+  saveButton.style.cssText = `
+    padding: 5px 10px;
+    cursor: pointer;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 3px;
+  `;
+
   const closeButton = document.createElement('button');
   closeButton.textContent = '✕';
   closeButton.style.cssText = `
@@ -162,6 +182,7 @@ function showPlayButton(audio, resolve) {
   `;
 
   container.appendChild(playButton);
+  container.appendChild(saveButton);
   container.appendChild(closeButton);
   document.body.appendChild(container);
 
@@ -177,6 +198,17 @@ function showPlayButton(audio, resolve) {
         alert('再生に失敗しました: ' + err.message);
         playbackState = 'error';
       });
+  };
+
+  saveButton.onclick = async () => {
+    try {
+      const blob = await fetch(audio.src).then(res => res.blob());
+      await db.saveAudio(blob, originalText);
+      alert('音声が保存されました');
+    } catch (error) {
+      console.error('Failed to save audio:', error);
+      alert('保存に失敗しました: ' + error.message);
+    }
   };
 
   closeButton.onclick = () => {
