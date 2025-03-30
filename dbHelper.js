@@ -93,25 +93,53 @@ class AudioDatabase {
       } catch (error) {
         console.warn('Existing database connection is invalid, reopening...', error);
         this.db = null;
+        this.isInitialized = false;
       }
     }
 
-    return new Promise((resolve, reject) => {
-      console.log('Creating new database connection');
-      const request = indexedDB.open(this.dbName, this.dbVersion);
+    // データベース接続の再作成
+    try {
+      return new Promise((resolve, reject) => {
+        console.log('Creating new database connection');
+        const request = indexedDB.open(this.dbName, this.dbVersion);
 
-      request.onerror = (event) => {
-        console.error('Error opening database:', event.target.error);
-        reject(event.target.error);
-      };
+        request.onupgradeneeded = (event) => {
+          console.log('Database upgrade needed (reopening)');
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains('audios')) {
+            const store = db.createObjectStore('audios', { keyPath: 'id', autoIncrement: true });
+            store.createIndex('timestamp', 'timestamp', { unique: false });
+            store.createIndex('text', 'text', { unique: false });
+            console.log('Created audios object store (reopening)');
+          }
+        };
 
-      request.onsuccess = (event) => {
-        this.db = event.target.result;
-        this.isInitialized = true;
-        console.log('Database opened successfully');
-        resolve(this.db);
-      };
-    });
+        request.onerror = (event) => {
+          console.error('Error opening database:', event.target.error);
+          this.isInitialized = false;
+          reject(event.target.error);
+        };
+
+        request.onsuccess = (event) => {
+          this.db = event.target.result;
+          this.isInitialized = true;
+          console.log('Database reopened successfully');
+          
+          // データベース接続が切断された場合の処理
+          this.db.onversionchange = () => {
+            this.db.close();
+            console.log('Database connection closed due to version change');
+            this.isInitialized = false;
+          };
+          
+          resolve(this.db);
+        };
+      });
+    } catch (error) {
+      console.error('Critical error reopening database:', error);
+      this.isInitialized = false;
+      throw error;
+    }
   }
 
   async saveAudio(audioBlob, text) {

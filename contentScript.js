@@ -85,7 +85,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       try {
         const blobUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(blobUrl);
-        
+
         // 再生準備完了イベント
         audio.oncanplaythrough = () => {
           console.log('Audio is ready to play');
@@ -104,7 +104,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
         console.log('Starting audio playback...');
         const playPromise = audio.play();
-        
+
         // play()はPromiseを返す場合があるのでハンドリング
         if (playPromise !== undefined) {
           playPromise.catch(error => {
@@ -112,7 +112,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             showError(`音声の再生に失敗しました: ${error.message}`);
           });
         }
-        
+
         await playPromise;
       } catch (playError) {
         console.error('Caught error during audio playback:', playError);

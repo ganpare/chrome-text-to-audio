@@ -131,15 +131,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         const optionsUrl = chrome.runtime.getURL('options.html');
         // パターンマッチングを使用してオプションページを検索
-        const tabs = await chrome.tabs.query({
-          url: [
-            optionsUrl,
-            `chrome-extension://${chrome.runtime.id}/options.html`
-          ]
-        });
+        const tabs = await chrome.tabs.query({});
         
-        if (tabs.length > 0) {
-          await chrome.tabs.reload(tabs[0].id);
+        // オプションページを探す
+        const optionsTab = tabs.find(tab => 
+          tab.url && (tab.url.includes(optionsUrl) || 
+          tab.url.includes(`chrome-extension://${chrome.runtime.id}/options.html`))
+        );
+        
+        if (optionsTab) {
+          console.log('Found options page, reloading:', optionsTab.id);
+          await chrome.tabs.reload(optionsTab.id);
           sendResponse({ success: true });
         } else {
           console.log('Options page not found. URLs tried:', optionsUrl);
