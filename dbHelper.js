@@ -145,11 +145,11 @@ class AudioDatabase {
   async saveAudio(audioBlob, text) {
     console.log('Saving audio to database...');
     try {
-      // 先にメタデータ取得を完了させる（トランザクション外で実行）
+      // 先にメタデータを同期的に取得する
       let fileSize = audioBlob.size;
       const metadata = this.getAudioMetadataSync(audioBlob);
       const duration = metadata.duration;
-      console.log(`Audio metadata (estimated): duration=${duration.toFixed(2)}s, size=${fileSize}bytes`);
+      console.log(`Saving audio: duration=${duration.toFixed(2)}s, size=${fileSize}bytes`);
       
       // メタデータ取得後にDBを開く
       await this.openDB();
@@ -157,9 +157,10 @@ class AudioDatabase {
       // データベースへの保存操作
       return new Promise((resolve, reject) => {
         try {
+          // 新しいトランザクションを開始
           const transaction = this.db.transaction(['audios'], 'readwrite');
           
-          // エラーハンドリングは一回だけ設定（重複を排除）
+          // エラーハンドリングは一回だけ設定
           transaction.onerror = (event) => {
             console.error('Transaction error:', event.target.error);
             reject(event.target.error);
@@ -168,6 +169,7 @@ class AudioDatabase {
           const store = transaction.objectStore('audios');
           const timestamp = new Date();
 
+          // レコードを作成（メタデータはすでに取得済み）
           const record = {
             blob: audioBlob,
             text: text.substring(0, 1000), // テキストが長すぎる場合は切り詰める
@@ -176,7 +178,7 @@ class AudioDatabase {
             fileSize: fileSize
           };
 
-          console.log(`Saving audio record to database...`);
+          console.log('Saving audio record to database...');
           const request = store.add(record);
 
           // 結果IDの取得
@@ -210,7 +212,7 @@ class AudioDatabase {
   
   // 音声ファイルからメタデータを取得する関数 (同期バージョン)
   getAudioMetadataSync(audioBlob) {
-    // メタデータが取得できない場合は推定値を返す
+    // メタデータの推定
     // WAVファイルの場合、44100Hz, 16bit, stereoと仮定して推定
     const estimatedBytesPerSecond = 44100 * 2 * 2; // サンプリングレート * ビット深度(バイト) * チャンネル数
     const estimatedDuration = audioBlob.size / estimatedBytesPerSecond;
@@ -219,12 +221,6 @@ class AudioDatabase {
       duration: estimatedDuration,
       fileSize: audioBlob.size
     };
-  }
-  
-  // 音声ファイルからメタデータを取得する関数 (非同期バージョン)
-  async getAudioMetadata(audioBlob) {
-    // トランザクションの問題を回避するため、同期的に推定値を返す
-    return this.getAudioMetadataSync(audioBlob);
   }
 
 
