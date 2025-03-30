@@ -132,6 +132,11 @@ button {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.audio-item.playing {
+  border-left: 4px solid #2196F3;
+  background-color: #E3F2FD;
+}
+
 .audio-text {
   font-size: 14px;
   margin-bottom: 10px;
@@ -148,17 +153,34 @@ button {
 .metadata-row {
   display: flex;
   align-items: center;
-  margin-bottom: 5px;
-}
-
-.metadata-row i {
-  font-size: 16px;
-  margin-right: 5px;
+  gap: 5px;
+  margin-bottom: 4px;
 }
 
 .audio-controls {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.audio-controls button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.audio-controls button:active {
+  transform: scale(0.95);
+}
+
+.audio-controls i {
+  margin-right: 5px;
+  font-size: 16px;
 }
 
 .play-button, .delete-button {
@@ -253,4 +275,20 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.nav-button {
+  background: #2196F3;
+  color: white;
+  padding: 8px;
+  min-width: 40px;
+}
+
+.nav-button:hover {
+  background: #1976D2;
+}
+
+.nav-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }

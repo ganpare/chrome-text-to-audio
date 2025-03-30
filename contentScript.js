@@ -8,16 +8,19 @@ let isProcessing = false;
 async function refreshOptionsPage() {
   try {
     const optionsUrl = chrome.runtime.getURL('options.html');
-    const queryInfo = { url: optionsUrl };
     
-    // Manifest V3では chrome.tabs APIにコンテンツスクリプトからアクセスできないため
-    // backgroundスクリプトに処理を委譲します
-    chrome.runtime.sendMessage({ 
+    // backgroundスクリプトに処理を委譲
+    const response = await chrome.runtime.sendMessage({ 
       action: 'refreshOptionsPage',
       optionsUrl: optionsUrl 
     });
+
+    if (!response || !response.success) {
+      throw new Error(response?.error || 'Failed to refresh options page');
+    }
   } catch (error) {
     console.log('Failed to refresh options page:', error);
+    throw error; // エラーを上位に伝播させる
   }
 }
 

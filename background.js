@@ -126,8 +126,31 @@ async function refreshOptionsPage() {
 // メッセージリスナーの追加
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'refreshOptionsPage') {
-    console.log('Received request to refresh options page');
-    refreshOptionsPage();
+    // 非同期処理を即時実行関数で処理
+    (async () => {
+      try {
+        const optionsUrl = chrome.runtime.getURL('options.html');
+        // パターンマッチングを使用してオプションページを検索
+        const tabs = await chrome.tabs.query({
+          url: [
+            optionsUrl,
+            `chrome-extension://${chrome.runtime.id}/options.html`
+          ]
+        });
+        
+        if (tabs.length > 0) {
+          await chrome.tabs.reload(tabs[0].id);
+          sendResponse({ success: true });
+        } else {
+          console.log('Options page not found. URLs tried:', optionsUrl);
+          sendResponse({ success: false, error: 'Options page not found' });
+        }
+      } catch (error) {
+        console.error('Failed to refresh options page:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // 非同期レスポンスを待つことを示す
   }
 });
 

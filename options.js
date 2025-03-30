@@ -1,5 +1,7 @@
 const db = AudioDatabase.getInstance();
 let currentAudio = null;
+let currentAudioId = null;
+let audioFiles = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM Content Loaded - Initializing options page');
@@ -14,7 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Database initialized successfully');
 
     // 保存されている音声データの数を確認
-    const audioFiles = await db.getAudioList();
+    audioFiles = await db.getAudioList();
     console.log('Number of audio files in database:', audioFiles.length);
     console.log('Audio files:', JSON.stringify(audioFiles, null, 2));
 
@@ -88,12 +90,8 @@ async function loadAudioList(searchQuery = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
-    // データベースの状態を確認
-    const dbState = await db.checkDatabaseState();
-    console.log('Database state:', dbState);
-
     console.log('Fetching audio list from database...');
-    const audioFiles = await db.getAudioList();
+    audioFiles = await db.getAudioList();
     console.log('Retrieved audio files:', audioFiles);
 
     const filteredFiles = searchQuery
@@ -124,6 +122,7 @@ async function loadAudioList(searchQuery = '') {
       console.log('Creating element for audio:', audio);
       const item = document.createElement('div');
       item.className = 'audio-item';
+      item.dataset.audioId = audio.id;
 
       const text = document.createElement('div');
       text.className = 'audio-text';
@@ -152,12 +151,21 @@ async function loadAudioList(searchQuery = '') {
       const controls = document.createElement('div');
       controls.className = 'audio-controls';
 
+      // 前の音声ボタン
+      const prevButton = document.createElement('button');
+      prevButton.className = 'nav-button prev-button';
+      prevButton.innerHTML = '<i class="material-icons">skip_previous</i>';
+      prevButton.onclick = () => playPreviousAudio(audio.id);
+      prevButton.title = '前の音声';
+
+      // 再生ボタン
       const playButton = document.createElement('button');
       playButton.className = 'play-button';
       playButton.innerHTML = '<i class="material-icons">play_arrow</i>再生';
       playButton.onclick = async () => {
         try {
           playButton.disabled = true;
+          currentAudioId = audio.id;
           const audioData = await db.getAudio(audio.id);
           if (audioData && audioData.blob) {
             await playAudio(audioData.blob);
@@ -172,6 +180,13 @@ async function loadAudioList(searchQuery = '') {
           playButton.disabled = false;
         }
       };
+
+      // 次の音声ボタン
+      const nextButton = document.createElement('button');
+      nextButton.className = 'nav-button next-button';
+      nextButton.innerHTML = '<i class="material-icons">skip_next</i>';
+      nextButton.onclick = () => playNextAudio(audio.id);
+      nextButton.title = '次の音声';
 
       const deleteButton = document.createElement('button');
       deleteButton.className = 'delete-button';
@@ -189,7 +204,9 @@ async function loadAudioList(searchQuery = '') {
         }
       };
 
+      controls.appendChild(prevButton);
       controls.appendChild(playButton);
+      controls.appendChild(nextButton);
       controls.appendChild(deleteButton);
 
       item.appendChild(text);
@@ -226,6 +243,10 @@ async function playAudio(blob) {
     audio.onended = () => {
       URL.revokeObjectURL(blobUrl);
       currentAudio = null;
+      // 再生終了時に自動で次の音声を再生
+      if (currentAudioId) {
+        playNextAudio(currentAudioId);
+      }
     };
 
     audio.onerror = (error) => {
@@ -235,9 +256,44 @@ async function playAudio(blob) {
       throw new Error('音声の再生中にエラーが発生しました');
     };
 
+    // 現在再生中の項目をハイライト
+    document.querySelectorAll('.audio-item').forEach(item => {
+      item.classList.remove('playing');
+    });
+    const currentItem = document.querySelector(`.audio-item[data-audio-id="${currentAudioId}"]`);
+    if (currentItem) {
+      currentItem.classList.add('playing');
+    }
+
     await audio.play();
   } catch (error) {
     console.error('Failed to play audio:', error);
     showStatus('音声の再生に失敗しました: ' + error.message, 'error');
+  }
+}
+
+// 前の音声を再生
+async function playPreviousAudio(currentId) {
+  const sortedFiles = [...audioFiles].sort((a, b) => 
+    new Date(b.timestamp) - new Date(a.timestamp)
+  );
+  const currentIndex = sortedFiles.findIndex(audio => audio.id === currentId);
+  if (currentIndex > 0) {
+    const previousAudio = sortedFiles[currentIndex - 1];
+    currentAudioId = previousAudio.id;
+    playAudio(previousAudio.blob);
+  }
+}
+
+// 次の音声を再生
+async function playNextAudio(currentId) {
+  const sortedFiles = [...audioFiles].sort((a, b) => 
+    new Date(b.timestamp) - new Date(a.timestamp)
+  );
+  const currentIndex = sortedFiles.findIndex(audio => audio.id === currentId);
+  if (currentIndex >= 0 && currentIndex < sortedFiles.length - 1) {
+    const nextAudio = sortedFiles[currentIndex + 1];
+    currentAudioId = nextAudio.id;
+    playAudio(nextAudio.blob);
   }
 }
