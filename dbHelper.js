@@ -147,20 +147,11 @@ class AudioDatabase {
     try {
       await this.openDB();
 
-      // 先にメタデータを取得する
-      let duration = null;
+      // メタデータを同期的に取得（推定値）
       let fileSize = audioBlob.size;
-      let metadata = null;
-
-      // メタデータの非同期取得を試みる
-      try {
-        metadata = await this.getAudioMetadata(audioBlob);
-        duration = metadata.duration;
-        console.log(`Got audio metadata: duration=${duration}s, size=${fileSize}bytes`);
-      } catch (metaError) {
-        console.warn('Failed to get audio metadata:', metaError);
-        // メタデータ取得に失敗しても処理を続行
-      }
+      const metadata = this.getAudioMetadataSync(audioBlob);
+      const duration = metadata.duration;
+      console.log(`Audio metadata (estimated): duration=${duration.toFixed(2)}s, size=${fileSize}bytes`);
 
       // データベースへの保存操作
       return new Promise((resolve, reject) => {
@@ -189,7 +180,6 @@ class AudioDatabase {
           request.onsuccess = (event) => {
             const id = event.target.result;
             console.log('Audio saved successfully with ID:', id);
-            resolve(id);
           };
 
           request.onerror = (event) => {
@@ -200,6 +190,12 @@ class AudioDatabase {
           // トランザクションが完了したことを確認
           transaction.oncomplete = () => {
             console.log('Transaction completed successfully');
+            resolve(request.result); // トランザクション完了後に解決
+          };
+          
+          transaction.onerror = (event) => {
+            console.error('Transaction failed:', event.target.error);
+            reject(event.target.error);
           };
 
         } catch (transactionError) {
@@ -213,38 +209,23 @@ class AudioDatabase {
     }
   }
   
-  // 音声ファイルからメタデータを取得する関数
+  // 音声ファイルからメタデータを取得する関数 (同期バージョン)
+  getAudioMetadataSync(audioBlob) {
+    // メタデータが取得できない場合は推定値を返す
+    // WAVファイルの場合、44100Hz, 16bit, stereoと仮定して推定
+    const estimatedBytesPerSecond = 44100 * 2 * 2; // サンプリングレート * ビット深度(バイト) * チャンネル数
+    const estimatedDuration = audioBlob.size / estimatedBytesPerSecond;
+    
+    return {
+      duration: estimatedDuration,
+      fileSize: audioBlob.size
+    };
+  }
+  
+  // 音声ファイルからメタデータを取得する関数 (非同期バージョン)
   async getAudioMetadata(audioBlob) {
-    return new Promise((resolve, reject) => {
-      try {
-        const audio = new Audio();
-        const blobUrl = URL.createObjectURL(audioBlob);
-        audio.src = blobUrl;
-
-        // メタデータ読み込み完了時
-        audio.onloadedmetadata = () => {
-          const duration = audio.duration;
-          URL.revokeObjectURL(blobUrl);
-          resolve({ duration, fileSize: audioBlob.size });
-        };
-
-        // エラー時の処理
-        audio.onerror = (error) => {
-          URL.revokeObjectURL(blobUrl);
-          reject(new Error('Failed to get audio metadata'));
-        };
-
-        // 3秒以内にメタデータが読み込まれない場合はタイムアウト
-        setTimeout(() => {
-          if (audio.duration === undefined || audio.duration === 0) {
-            URL.revokeObjectURL(blobUrl);
-            reject(new Error('Metadata loading timeout'));
-          }
-        }, 3000);
-      } catch (error) {
-        reject(error);
-      }
-    });
+    // トランザクションの問題を回避するため、同期的に推定値を返す
+    return this.getAudioMetadataSync(audioBlob);
   }
 
 
