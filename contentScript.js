@@ -1,7 +1,13 @@
 // グローバル変数
 let currentAudio = null;
 let playbackState = 'idle'; // idle, loading, playing, paused, error
-const db = AudioDatabase.getInstance();
+let db = null;
+try {
+  db = AudioDatabase.getInstance();
+  console.log('AudioDatabase instance created successfully');
+} catch (error) {
+  console.error('Failed to create AudioDatabase instance:', error);
+}
 let isProcessing = false;
 
 // オプションページを更新する関数
@@ -76,20 +82,42 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       }
 
       // 音声を再生
-      const blobUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(blobUrl);
+      try {
+        const blobUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(blobUrl);
+        
+        // 再生準備完了イベント
+        audio.oncanplaythrough = () => {
+          console.log('Audio is ready to play');
+        };
 
-      audio.onended = () => {
-        URL.revokeObjectURL(blobUrl);
-      };
+        audio.onended = () => {
+          console.log('Audio playback ended');
+          URL.revokeObjectURL(blobUrl);
+        };
 
-      audio.onerror = (error) => {
-        URL.revokeObjectURL(blobUrl);
-        console.error('Audio playback error:', error);
-        showError('音声の再生中にエラーが発生しました');
-      };
+        audio.onerror = (error) => {
+          console.error('Audio playback error:', error);
+          URL.revokeObjectURL(blobUrl);
+          showError(`音声の再生中にエラーが発生しました: ${error.message || '不明なエラー'}`);
+        };
 
-      await audio.play();
+        console.log('Starting audio playback...');
+        const playPromise = audio.play();
+        
+        // play()はPromiseを返す場合があるのでハンドリング
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error('Audio play promise rejected:', error);
+            showError(`音声の再生に失敗しました: ${error.message}`);
+          });
+        }
+        
+        await playPromise;
+      } catch (playError) {
+        console.error('Caught error during audio playback:', playError);
+        showError(`音声の再生処理中にエラーが発生しました: ${playError.message}`);
+      }
 
       // 通知を表示
       showSuccessNotification('音声の再生を開始しました');
