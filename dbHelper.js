@@ -147,101 +147,60 @@ class AudioDatabase {
     try {
       await this.openDB();
 
+      // 先にメタデータを取得する
+      let duration = null;
+      let fileSize = audioBlob.size;
+      let metadata = null;
+
+      // メタデータの非同期取得を試みる
+      try {
+        metadata = await this.getAudioMetadata(audioBlob);
+        duration = metadata.duration;
+        console.log(`Got audio metadata: duration=${duration}s, size=${fileSize}bytes`);
+      } catch (metaError) {
+        console.warn('Failed to get audio metadata:', metaError);
+        // メタデータ取得に失敗しても処理を続行
+      }
+
+      // データベースへの保存操作
       return new Promise((resolve, reject) => {
         try {
           const transaction = this.db.transaction(['audios'], 'readwrite');
+          
           transaction.onerror = (event) => {
             console.error('Transaction error:', event.target.error);
             reject(event.target.error);
           };
 
           const store = transaction.objectStore('audios');
+          const timestamp = new Date();
 
-          // メタデータ取得用の音声要素
-          const audio = new Audio();
-          const blobUrl = URL.createObjectURL(audioBlob);
-          audio.src = blobUrl;
-
-          // メタデータ読み込み完了時
-          audio.onloadedmetadata = () => {
-            const duration = audio.duration;
-            URL.revokeObjectURL(blobUrl);
-
-            const fileSize = audioBlob.size;
-            const timestamp = new Date();
-
-            console.log(`Saving audio: duration=${duration}s, size=${fileSize}bytes`);
-
-            const record = {
-              blob: audioBlob,
-              text: text.substring(0, 1000), // テキストが長すぎる場合は切り詰める
-              timestamp: timestamp,
-              duration: duration,
-              fileSize: fileSize
-            };
-
-            try {
-              const request = store.add(record);
-
-              request.onsuccess = (event) => {
-                const id = event.target.result;
-                console.log('Audio saved successfully with ID:', id);
-                resolve(id);
-              };
-
-              request.onerror = (event) => {
-                console.error('Error adding record:', event.target.error);
-                reject(event.target.error);
-              };
-            } catch (storeError) {
-              console.error('Error in store.add:', storeError);
-              reject(storeError);
-            }
+          const record = {
+            blob: audioBlob,
+            text: text.substring(0, 1000), // テキストが長すぎる場合は切り詰める
+            timestamp: timestamp,
+            duration: duration,
+            fileSize: fileSize
           };
 
-          // エラー時の処理
-          audio.onerror = (error) => {
-            console.warn('Failed to get audio metadata:', error);
-            URL.revokeObjectURL(blobUrl);
+          console.log(`Saving audio record to database...`);
+          const request = store.add(record);
 
-            // メタデータの取得に失敗した場合でも保存を試みる
-            const fileSize = audioBlob.size;
-            const timestamp = new Date();
-
-            const record = {
-              blob: audioBlob,
-              text: text.substring(0, 1000),
-              timestamp: timestamp,
-              duration: null,
-              fileSize: fileSize
-            };
-
-            try {
-              const request = store.add(record);
-
-              request.onsuccess = (event) => {
-                const id = event.target.result;
-                console.log('Audio saved without metadata with ID:', id);
-                resolve(id);
-              };
-
-              request.onerror = (event) => {
-                console.error('Error adding record (fallback):', event.target.error);
-                reject(event.target.error);
-              };
-            } catch (fallbackError) {
-              console.error('Error in fallback store.add:', fallbackError);
-              reject(fallbackError);
-            }
+          request.onsuccess = (event) => {
+            const id = event.target.result;
+            console.log('Audio saved successfully with ID:', id);
+            resolve(id);
           };
 
-          // 5秒以内にメタデータが読み込まれない場合はタイムアウト
-          setTimeout(() => {
-            if (audio.duration === undefined || audio.duration === 0) {
-              console.warn('Metadata loading timeout');
-              audio.onerror(new Error('Metadata loading timeout'));
-            }
-          }, 5000);
+          request.onerror = (event) => {
+            console.error('Error adding record:', event.target.error);
+            reject(event.target.error);
+          };
+          
+          // トランザクションが完了したことを確認
+          transaction.oncomplete = () => {
+            console.log('Transaction completed successfully');
+          };
 
         } catch (transactionError) {
           console.error('Error creating transaction:', transactionError);
@@ -252,6 +211,40 @@ class AudioDatabase {
       console.error('Database error in saveAudio:', dbError);
       throw dbError;
     }
+  }
+  
+  // 音声ファイルからメタデータを取得する関数
+  async getAudioMetadata(audioBlob) {
+    return new Promise((resolve, reject) => {
+      try {
+        const audio = new Audio();
+        const blobUrl = URL.createObjectURL(audioBlob);
+        audio.src = blobUrl;
+
+        // メタデータ読み込み完了時
+        audio.onloadedmetadata = () => {
+          const duration = audio.duration;
+          URL.revokeObjectURL(blobUrl);
+          resolve({ duration, fileSize: audioBlob.size });
+        };
+
+        // エラー時の処理
+        audio.onerror = (error) => {
+          URL.revokeObjectURL(blobUrl);
+          reject(new Error('Failed to get audio metadata'));
+        };
+
+        // 3秒以内にメタデータが読み込まれない場合はタイムアウト
+        setTimeout(() => {
+          if (audio.duration === undefined || audio.duration === 0) {
+            URL.revokeObjectURL(blobUrl);
+            reject(new Error('Metadata loading timeout'));
+          }
+        }, 3000);
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
 
