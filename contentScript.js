@@ -57,11 +57,22 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         console.log('Audio saved successfully with ID:', audioId);
 
         // オプションページを更新
-        chrome.runtime.sendMessage({ action: 'refreshOptionsPage' }, (response) => {
-          console.log('Refresh options page response:', response);
-        });
+        try {
+          chrome.runtime.sendMessage({ action: 'refreshOptionsPage' }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.log('Refresh message error:', chrome.runtime.lastError);
+              return;
+            }
+            console.log('Refresh options page response:', response);
+          });
+        } catch (msgError) {
+          console.log('Failed to send refresh message:', msgError);
+          // エラーを無視して処理を続行
+        }
       } catch (dbError) {
         console.error('Failed to save audio to database:', dbError);
+        // エラー通知を表示
+        showError(`データベースへの保存に失敗しました: ${dbError.message}`);
       }
 
       // 音声を再生
