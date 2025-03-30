@@ -166,12 +166,26 @@ async function loadAudioList(searchQuery = '') {
         try {
           playButton.disabled = true;
           currentAudioId = audio.id;
+          
+          // データベースから音声データを取得
+          console.log('Fetching audio data for ID:', audio.id);
           const audioData = await db.getAudio(audio.id);
-          if (audioData && audioData.blob) {
-            await playAudio(audioData.blob);
+          
+          if (!audioData) {
+            throw new Error('音声データが見つかりません (データなし)');
+          }
+          
+          console.log('Audio data retrieved:', audioData);
+          
+          if (!audioData.blob) {
+            throw new Error('音声データが見つかりません (Blobなし)');
+          }
+          
+          // 音声を再生
+          const success = await playAudio(audioData.blob);
+          
+          if (success) {
             playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
-          } else {
-            throw new Error('音声データが見つかりません');
           }
         } catch (error) {
           console.error('Failed to play audio:', error);
@@ -236,6 +250,10 @@ async function playAudio(blob) {
   }
   
   try {
+    if (!blob) {
+      throw new Error('Blob data is missing');
+    }
+    
     const blobUrl = URL.createObjectURL(blob);
     const audio = new Audio(blobUrl);
     currentAudio = audio;
@@ -266,9 +284,11 @@ async function playAudio(blob) {
     }
 
     await audio.play();
+    return true;
   } catch (error) {
     console.error('Failed to play audio:', error);
     showStatus('音声の再生に失敗しました: ' + error.message, 'error');
+    return false;
   }
 }
 
