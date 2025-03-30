@@ -1,6 +1,18 @@
 // IndexedDBの初期化と操作を管理するクラス
 class AudioDatabase {
   static instance = null;
+  static db = null;
+  static dbPromise = null;
+
+  constructor() {
+    if (AudioDatabase.instance) {
+      return AudioDatabase.instance;
+    }
+    AudioDatabase.instance = this;
+    this.dbName = 'audioStorage';
+    this.dbVersion = 2;
+    this.objectStoreName = 'audioStore';
+  }
 
   static getInstance() {
     if (!AudioDatabase.instance) {
@@ -9,68 +21,32 @@ class AudioDatabase {
     return AudioDatabase.instance;
   }
 
-  constructor() {
-    if (AudioDatabase.instance) {
-      return AudioDatabase.instance;
-    }
-    this.dbName = 'audioStorage';
-    this.dbVersion = 2;
-    this.storeName = 'audioFiles';
-    this._db = null;
-    AudioDatabase.instance = this;
-  }
-
-  // データベースの状態を確認
-  async checkDatabaseState() {
-    try {
-      const db = await this.openDB();
-      const transaction = db.transaction([this.storeName], 'readonly');
-      const store = transaction.objectStore(this.storeName);
-      const countRequest = store.count();
-      
-      return new Promise((resolve, reject) => {
-        countRequest.onsuccess = () => {
-          resolve({
-            isOpen: !!this._db,
-            objectStoreExists: db.objectStoreNames.contains(this.storeName),
-            recordCount: countRequest.result,
-            dbName: this.dbName,
-            dbVersion: this.dbVersion
-          });
-        };
-        countRequest.onerror = () => {
-          reject(countRequest.error);
-        };
-      });
-    } catch (error) {
-      console.error('Error checking database state:', error);
-      return {
-        isOpen: false,
-        error: error.message
-      };
-    }
-  }
-
   // データベースを開く
   async openDB() {
-    if (this._db) {
+    if (AudioDatabase.db) {
       console.log('Using existing database connection');
-      return this._db;
+      return AudioDatabase.db;
     }
 
-    return new Promise((resolve, reject) => {
-      console.log('Opening database:', this.dbName);
+    if (AudioDatabase.dbPromise) {
+      console.log('Using existing database promise');
+      return AudioDatabase.dbPromise;
+    }
+
+    console.log('Opening database:', this.dbName);
+    AudioDatabase.dbPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
-      request.onerror = () => {
-        console.error('Database open error:', request.error);
-        reject(request.error);
+      request.onerror = (event) => {
+        console.error('Database error:', event.target.error);
+        AudioDatabase.dbPromise = null;
+        reject(event.target.error);
       };
 
-      request.onsuccess = () => {
+      request.onsuccess = (event) => {
         console.log('Database opened successfully');
-        this._db = request.result;
-        resolve(this._db);
+        AudioDatabase.db = event.target.result;
+        resolve(AudioDatabase.db);
       };
 
       request.onupgradeneeded = (event) => {
@@ -78,19 +54,82 @@ class AudioDatabase {
         const db = event.target.result;
         
         // 既存のオブジェクトストアを削除（バージョンアップグレード時）
-        if (db.objectStoreNames.contains(this.storeName)) {
-          db.deleteObjectStore(this.storeName);
+        if (db.objectStoreNames.contains(this.objectStoreName)) {
+          db.deleteObjectStore(this.objectStoreName);
         }
 
         // 新しいオブジェクトストアを作成
-        console.log('Creating object store:', this.storeName);
-        const store = db.createObjectStore(this.storeName, { keyPath: 'id', autoIncrement: true });
+        console.log('Creating object store:', this.objectStoreName);
+        const store = db.createObjectStore(this.objectStoreName, { keyPath: 'id', autoIncrement: true });
         
         // インデックスの作成
         store.createIndex('timestamp', 'timestamp', { unique: false });
         store.createIndex('text', 'text', { unique: false });
         store.createIndex('fileName', 'fileName', { unique: false });
         store.createIndex('duration', 'duration', { unique: false });
+      };
+    });
+
+    return AudioDatabase.dbPromise;
+  }
+
+  // データベースの状態を確認
+  async checkDatabaseState() {
+    try {
+      const db = await this.openDB();
+      
+      // オブジェクトストアが存在しない場合は、データベースを削除して再作成
+      if (!db.objectStoreNames.contains(this.objectStoreName)) {
+        console.log('Object store not found, deleting database...');
+        await this.deleteDatabase();
+        console.log('Database deleted, reopening...');
+        return await this.checkDatabaseState();
+      }
+
+      const transaction = db.transaction(this.objectStoreName, 'readonly');
+      const store = transaction.objectStore(this.objectStoreName);
+      const countRequest = store.count();
+      
+      return new Promise((resolve, reject) => {
+        countRequest.onsuccess = () => {
+          const state = {
+            isOpen: !!db,
+            objectStoreExists: db.objectStoreNames.contains(this.objectStoreName),
+            recordCount: countRequest.result,
+            dbName: this.dbName,
+            dbVersion: this.dbVersion
+          };
+          console.log('Database state:', state);
+          resolve(state);
+        };
+        countRequest.onerror = () => reject(countRequest.error);
+      });
+    } catch (error) {
+      console.error('Error checking database state:', error);
+      return {
+        isOpen: false,
+        objectStoreExists: false,
+        recordCount: 0,
+        dbName: this.dbName,
+        dbVersion: this.dbVersion,
+        error: error.message
+      };
+    }
+  }
+
+  // データベースを削除
+  async deleteDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(this.dbName);
+      request.onsuccess = () => {
+        console.log('Database deleted successfully');
+        AudioDatabase.db = null;
+        AudioDatabase.dbPromise = null;
+        resolve();
+      };
+      request.onerror = () => {
+        console.error('Error deleting database:', request.error);
+        reject(request.error);
       };
     });
   }
@@ -121,18 +160,26 @@ class AudioDatabase {
       console.warn('Failed to get audio duration:', error);
     }
 
+    // BlobをBase64に変換
+    const base64Data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(audioBlob);
+    });
+
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([this.storeName], 'readwrite');
-      const store = transaction.objectStore(this.storeName);
+      const transaction = db.transaction([this.objectStoreName], 'readwrite');
+      const store = transaction.objectStore(this.objectStoreName);
 
       const audio = {
-        blob: audioBlob,
         text: originalText,
         timestamp: timestamp.toISOString(),
         fileName: fileName,
         duration: duration,
         fileSize: audioBlob.size,
-        mimeType: audioBlob.type
+        mimeType: audioBlob.type,
+        data: base64Data  // Base64形式でデータを保存
       };
 
       const request = store.add(audio);
@@ -155,8 +202,8 @@ class AudioDatabase {
     return new Promise((resolve, reject) => {
       try {
         console.log('Starting transaction for getAudioList');
-        const transaction = db.transaction([this.storeName], 'readonly');
-        const store = transaction.objectStore(this.storeName);
+        const transaction = db.transaction([this.objectStoreName], 'readonly');
+        const store = transaction.objectStore(this.objectStoreName);
         const request = store.getAll();
 
         request.onsuccess = () => {
@@ -202,14 +249,22 @@ class AudioDatabase {
     console.log('Getting audio with ID:', id);
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([this.storeName], 'readonly');
-      const store = transaction.objectStore(this.storeName);
+      const transaction = db.transaction([this.objectStoreName], 'readonly');
+      const store = transaction.objectStore(this.objectStoreName);
       const request = store.get(id);
 
       request.onsuccess = () => {
         const audio = request.result;
         if (audio) {
           console.log('Retrieved audio:', audio.fileName);
+          // Base64データをBlobに変換
+          const byteString = atob(audio.data.split(',')[1]);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          audio.blob = new Blob([ab], { type: audio.mimeType });
         } else {
           console.log('Audio not found');
         }
@@ -226,8 +281,8 @@ class AudioDatabase {
   async deleteAudio(id) {
     const db = await this.openDB();
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction([this.storeName], 'readwrite');
-      const store = transaction.objectStore(this.storeName);
+      const transaction = db.transaction([this.objectStoreName], 'readwrite');
+      const store = transaction.objectStore(this.objectStoreName);
       const request = store.delete(id);
 
       request.onsuccess = () => resolve();

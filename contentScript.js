@@ -102,10 +102,6 @@ async function handleAudioPlayback(url, originalText) {
     const blob = await response.blob();
     console.log('Audio data fetched successfully');
     
-    // データベースに保存
-    await db.saveAudio(blob, originalText);
-    console.log('Audio saved to database');
-    
     // BlobをBase64に変換
     const base64Data = await blobToBase64(blob);
     console.log('Audio data converted to base64');
@@ -128,6 +124,17 @@ async function handleAudioPlayback(url, originalText) {
           playbackState = 'playing';
           console.log('Audio playback started');
           showPlayButton(audio, originalText, base64Data);
+          
+          // 再生開始後にデータベースに保存
+          try {
+            await db.saveAudio(blob, originalText);
+            console.log('Audio saved to database');
+          } catch (error) {
+            console.error('Failed to save audio to database:', error);
+            // データベースへの保存失敗は致命的ではないため、
+            // エラーをスローせずに続行
+          }
+          
           resolve();
         } catch (error) {
           reject(error);

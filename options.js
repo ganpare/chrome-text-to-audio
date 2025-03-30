@@ -5,9 +5,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM Content Loaded - Initializing options page');
   
   try {
+    // データベースの状態を詳細に確認
+    const dbState = await db.checkDatabaseState();
+    console.log('Database state:', JSON.stringify(dbState, null, 2));
+
     // データベースの初期化を確認
     await db.openDB();
     console.log('Database initialized successfully');
+
+    // 保存されている音声データの数を確認
+    const audioFiles = await db.getAudioList();
+    console.log('Number of audio files in database:', audioFiles.length);
+    console.log('Audio files:', JSON.stringify(audioFiles, null, 2));
 
     // Load saved API key
     const result = await chrome.storage.sync.get('falApiKey');
