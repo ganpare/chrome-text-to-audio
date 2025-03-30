@@ -1,7 +1,7 @@
 // グローバル変数
 let currentAudio = null;
 let playbackState = 'idle'; // idle, loading, playing, paused, error
-const db = new AudioDatabase();
+const db = AudioDatabase.getInstance();
 let isProcessing = false;
 
 // オプションページを更新する関数

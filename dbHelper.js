@@ -1,10 +1,54 @@
 // IndexedDBの初期化と操作を管理するクラス
 class AudioDatabase {
+  static instance = null;
+
+  static getInstance() {
+    if (!AudioDatabase.instance) {
+      AudioDatabase.instance = new AudioDatabase();
+    }
+    return AudioDatabase.instance;
+  }
+
   constructor() {
+    if (AudioDatabase.instance) {
+      return AudioDatabase.instance;
+    }
     this.dbName = 'audioStorage';
     this.dbVersion = 2;
     this.storeName = 'audioFiles';
     this._db = null;
+    AudioDatabase.instance = this;
+  }
+
+  // データベースの状態を確認
+  async checkDatabaseState() {
+    try {
+      const db = await this.openDB();
+      const transaction = db.transaction([this.storeName], 'readonly');
+      const store = transaction.objectStore(this.storeName);
+      const countRequest = store.count();
+      
+      return new Promise((resolve, reject) => {
+        countRequest.onsuccess = () => {
+          resolve({
+            isOpen: !!this._db,
+            objectStoreExists: db.objectStoreNames.contains(this.storeName),
+            recordCount: countRequest.result,
+            dbName: this.dbName,
+            dbVersion: this.dbVersion
+          });
+        };
+        countRequest.onerror = () => {
+          reject(countRequest.error);
+        };
+      });
+    } catch (error) {
+      console.error('Error checking database state:', error);
+      return {
+        isOpen: false,
+        error: error.message
+      };
+    }
   }
 
   // データベースを開く

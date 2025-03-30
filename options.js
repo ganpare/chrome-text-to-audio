@@ -1,4 +1,4 @@
-const db = new AudioDatabase();
+const db = AudioDatabase.getInstance();
 let currentAudio = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -79,6 +79,10 @@ async function loadAudioList(searchQuery = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
+    // データベースの状態を確認
+    const dbState = await db.checkDatabaseState();
+    console.log('Database state:', dbState);
+
     console.log('Fetching audio list from database...');
     const audioFiles = await db.getAudioList();
     console.log('Retrieved audio files:', audioFiles);
@@ -148,6 +152,7 @@ async function loadAudioList(searchQuery = '') {
           const audioData = await db.getAudio(audio.id);
           if (audioData && audioData.blob) {
             await playAudio(audioData.blob);
+            playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
           } else {
             throw new Error('音声データが見つかりません');
           }
