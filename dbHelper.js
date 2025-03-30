@@ -145,19 +145,21 @@ class AudioDatabase {
   async saveAudio(audioBlob, text) {
     console.log('Saving audio to database...');
     try {
-      await this.openDB();
-
-      // メタデータを同期的に取得（推定値）
+      // 先にメタデータ取得を完了させる（トランザクション外で実行）
       let fileSize = audioBlob.size;
       const metadata = this.getAudioMetadataSync(audioBlob);
       const duration = metadata.duration;
       console.log(`Audio metadata (estimated): duration=${duration.toFixed(2)}s, size=${fileSize}bytes`);
+      
+      // メタデータ取得後にDBを開く
+      await this.openDB();
 
       // データベースへの保存操作
       return new Promise((resolve, reject) => {
         try {
           const transaction = this.db.transaction(['audios'], 'readwrite');
           
+          // エラーハンドリングは一回だけ設定（重複を排除）
           transaction.onerror = (event) => {
             console.error('Transaction error:', event.target.error);
             reject(event.target.error);
@@ -177,9 +179,11 @@ class AudioDatabase {
           console.log(`Saving audio record to database...`);
           const request = store.add(record);
 
+          // 結果IDの取得
+          let resultId = null;
           request.onsuccess = (event) => {
-            const id = event.target.result;
-            console.log('Audio saved successfully with ID:', id);
+            resultId = event.target.result;
+            console.log('Audio saved successfully with ID:', resultId);
           };
 
           request.onerror = (event) => {
@@ -190,12 +194,7 @@ class AudioDatabase {
           // トランザクションが完了したことを確認
           transaction.oncomplete = () => {
             console.log('Transaction completed successfully');
-            resolve(request.result); // トランザクション完了後に解決
-          };
-          
-          transaction.onerror = (event) => {
-            console.error('Transaction failed:', event.target.error);
-            reject(event.target.error);
+            resolve(resultId); // 保存したIDを返す
           };
 
         } catch (transactionError) {
