@@ -105,6 +105,28 @@ function createContextMenu() {
 chrome.runtime.onInstalled.addListener(createContextMenu);
 chrome.runtime.onStartup.addListener(createContextMenu);
 
+// メッセージリスナーの追加
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'refreshOptionsPage') {
+    // 非同期処理を即時実行関数で処理
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ url: request.optionsUrl });
+        if (tabs.length > 0) {
+          await chrome.tabs.reload(tabs[0].id);
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: 'Options page not found' });
+        }
+      } catch (error) {
+        console.error('Failed to refresh options page:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // 非同期レスポンスを待つことを示す
+  }
+});
+
 // コンテキストメニューのクリックイベント処理
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "kokoroTTS-read" && info.selectionText) {

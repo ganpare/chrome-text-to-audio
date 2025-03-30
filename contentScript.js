@@ -1,219 +1,240 @@
 // グローバル変数
 let currentAudio = null;
-let playbackState = 'idle'; // idle, loading, playing, error
+let playbackState = 'idle'; // idle, loading, playing, paused, error
 const db = new AudioDatabase();
+let isProcessing = false;
 
-// Listen for messages from background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('Content script received message:', request, 'Current state:', playbackState);
-
-  // PINGメッセージの即時処理
-  if (request.type === "PING") {
-    sendResponse({ status: "OK" });
-    return true;
-  }
-
-  // エラーメッセージの即時処理
-  if (request.action === "showError") {
-    console.error('Error from background:', request.error);
-    alert(request.error);
-    sendResponse({ status: "error shown" });
-    return false;
-  }
-
-  // 音声再生リクエストの処理
-  if (request.action === "playAudio" && request.url) {
-    handleAudioPlayback(request.url, request.text)
-      .then(result => {
-        sendResponse(result);
-      })
-      .catch(error => {
-        console.error('Playback error:', error);
-        sendResponse({ status: "error", error: error.message });
-      });
-    return true; // 非同期レスポンスを示す
-  }
-
-  return false; // 同期レスポンスの場合
-});
-
-// 音声再生を処理する関数
-async function handleAudioPlayback(url, originalText) {
+// オプションページを更新する関数
+async function refreshOptionsPage() {
   try {
-    // 既存の音声の停止
-    if (currentAudio) {
-      try {
-        currentAudio.pause();
-        currentAudio.remove();
-        playbackState = 'idle';
-      } catch (e) {
-        console.warn('Error cleaning up previous audio:', e);
-      }
-      currentAudio = null;
-    }
-
-    playbackState = 'loading';
-    const audio = new Audio();
+    const optionsUrl = chrome.runtime.getURL('options.html');
+    const queryInfo = { url: optionsUrl };
     
-    return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        reject(new Error('音声の読み込みがタイムアウトしました'));
-      }, 30000);
-
-      audio.onloadstart = () => console.log('Audio loading started');
-
-      audio.oncanplay = () => {
-        clearTimeout(timeoutId);
-        console.log('Audio can play, attempting playback');
-        
-        audio.play()
-          .then(() => {
-            playbackState = 'playing';
-            console.log('Playback started successfully');
-            resolve({ status: "playing" });
-          })
-          .catch(error => {
-            console.warn('Auto-play failed, showing play button:', error);
-            showPlayButton(audio, resolve, originalText);
-          });
-      };
-
-      audio.onplay = () => {
-        console.log('Audio playback started');
-        playbackState = 'playing';
-      };
-
-      audio.onpause = () => {
-        console.log('Audio playback paused');
-        if (playbackState === 'playing') {
-          playbackState = 'idle';
-        }
-      };
-
-      audio.onended = () => {
-        console.log('Audio playback ended');
-        playbackState = 'idle';
-        currentAudio = null;
-      };
-
-      audio.onerror = (e) => {
-        clearTimeout(timeoutId);
-        const errorMessage = audio.error ? 
-          `Error code: ${audio.error.code}, Message: ${audio.error.message}` :
-          'Unknown error occurred';
-        console.error('Audio error:', errorMessage);
-        playbackState = 'error';
-        reject(new Error(errorMessage));
-      };
-
-      // URLをBlobに変換して再生と保存
-      fetch(url)
-        .then(response => response.blob())
-        .then(async blob => {
-          const blobUrl = URL.createObjectURL(blob);
-          audio.src = blobUrl;
-          currentAudio = audio;
-
-          // 音声データを保存
-          try {
-            await db.saveAudio(blob, originalText);
-            console.log('Audio saved to database');
-          } catch (error) {
-            console.error('Failed to save audio:', error);
-          }
-        })
-        .catch(error => {
-          reject(new Error('音声ファイルの取得に失敗しました: ' + error.message));
-        });
+    // Manifest V3では chrome.tabs APIにコンテンツスクリプトからアクセスできないため
+    // backgroundスクリプトに処理を委譲します
+    chrome.runtime.sendMessage({ 
+      action: 'refreshOptionsPage',
+      optionsUrl: optionsUrl 
     });
   } catch (error) {
-    throw new Error('音声の再生準備に失敗しました: ' + error.message);
+    console.log('Failed to refresh options page:', error);
   }
 }
 
-// 再生ボタンを表示する関数
-function showPlayButton(audio, resolve, originalText) {
+// Listen for messages from background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('Content script received message:', request);
+  console.log('Current state:', playbackState);
+
+  if (request.type === "PING") {
+    sendResponse({ state: playbackState });
+    return false;
+  }
+
+  if (request.type === "ERROR") {
+    // 処理中でない場合のみエラーメッセージを表示
+    if (!isProcessing) {
+      console.error('Error from background script:', request.error);
+    }
+    return false;
+  }
+
+  if (request.action === "playAudio" && request.url) {
+    // 既に再生中の場合は停止
+    if (playbackState === 'playing' || playbackState === 'loading') {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+      }
+      playbackState = 'idle';
+    }
+
+    playbackState = 'loading';
+    isProcessing = true;
+    sendResponse({ state: playbackState });
+
+    handleAudioPlayback(request.url, request.text)
+      .then(async () => {
+        console.log('Audio playback started successfully');
+        isProcessing = false;
+        // 音声保存後にオプションページを更新（エラーハンドリング追加）
+        try {
+          await refreshOptionsPage();
+        } catch (error) {
+          console.warn('Failed to refresh options page:', error);
+          // オプションページの更新失敗は致命的ではないため、
+          // ユーザーにエラーは表示しません
+        }
+      })
+      .catch(error => {
+        console.error('Error in audio playback:', error);
+        playbackState = 'error';
+        isProcessing = false;
+        chrome.runtime.sendMessage({
+          type: "ERROR",
+          error: `音声の再生に失敗しました: ${error.message}`
+        });
+      });
+    return false;
+  }
+
+  return false;
+});
+
+async function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function handleAudioPlayback(url, originalText) {
+  try {
+    console.log('Starting audio playback process for URL:', url);
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`音声データの取得に失敗しました: ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    console.log('Audio data fetched successfully');
+    
+    // データベースに保存
+    await db.saveAudio(blob, originalText);
+    console.log('Audio saved to database');
+    
+    // BlobをBase64に変換
+    const base64Data = await blobToBase64(blob);
+    console.log('Audio data converted to base64');
+    
+    return new Promise((resolve, reject) => {
+      // 新しいAudio要素を作成
+      const audio = new Audio();
+      
+      // エラーハンドリングを先に設定
+      audio.onerror = (e) => {
+        console.error('Audio loading error:', e);
+        reject(new Error('音声データの読み込みに失敗しました'));
+      };
+      
+      // 成功時のハンドラを設定
+      audio.oncanplaythrough = async () => {
+        try {
+          currentAudio = audio;
+          await audio.play();
+          playbackState = 'playing';
+          console.log('Audio playback started');
+          showPlayButton(audio, originalText, base64Data);
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      // イベントリスナーを設定
+      audio.addEventListener('ended', () => {
+        playbackState = 'idle';
+        console.log('Audio playback completed');
+      });
+
+      audio.addEventListener('pause', () => {
+        if (playbackState === 'playing') {
+          playbackState = 'paused';
+          console.log('Audio playback paused');
+        }
+      });
+
+      audio.addEventListener('play', () => {
+        playbackState = 'playing';
+        console.log('Audio playback resumed');
+      });
+      
+      // ソースを設定
+      audio.src = base64Data;
+    });
+    
+  } catch (error) {
+    playbackState = 'error';
+    console.error('Error in handleAudioPlayback:', error);
+    throw error;
+  }
+}
+
+function showPlayButton(audio, originalText, base64Data) {
   const container = document.createElement('div');
   container.style.cssText = `
     position: fixed;
-    top: 20px;
+    bottom: 20px;
     right: 20px;
     background: white;
     padding: 10px;
     border-radius: 5px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 9999;
+    z-index: 10000;
     display: flex;
     gap: 10px;
-    align-items: center;
   `;
 
+  const updatePlayButtonText = () => {
+    playButton.textContent = audio.paused ? '再生' : '一時停止';
+  };
+
   const playButton = document.createElement('button');
-  playButton.textContent = '音声を再生';
-  playButton.style.cssText = `
-    padding: 5px 10px;
-    cursor: pointer;
-    background: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 3px;
-  `;
+  updatePlayButtonText();
+  playButton.onclick = async () => {
+    try {
+      if (audio.paused) {
+        await audio.play();
+      } else {
+        audio.pause();
+      }
+      updatePlayButtonText();
+    } catch (error) {
+      console.error('Error toggling playback:', error);
+      playbackState = 'error';
+      chrome.runtime.sendMessage({
+        type: "ERROR",
+        error: `再生の切り替えに失敗しました: ${error.message}`
+      });
+    }
+  };
 
   const saveButton = document.createElement('button');
   saveButton.textContent = '保存';
-  saveButton.style.cssText = `
-    padding: 5px 10px;
-    cursor: pointer;
-    background: #2196F3;
-    color: white;
-    border: none;
-    border-radius: 3px;
-  `;
+  saveButton.onclick = () => {
+    try {
+      const a = document.createElement('a');
+      a.href = base64Data;
+      a.download = `audio_${Date.now()}.wav`;
+      a.click();
+    } catch (error) {
+      console.error('Error saving audio:', error);
+      chrome.runtime.sendMessage({
+        type: "ERROR",
+        error: `音声の保存に失敗しました: ${error.message}`
+      });
+    }
+  };
 
   const closeButton = document.createElement('button');
-  closeButton.textContent = '✕';
-  closeButton.style.cssText = `
-    padding: 5px;
-    cursor: pointer;
-    background: none;
-    border: none;
-    font-size: 12px;
-    color: #666;
-  `;
+  closeButton.textContent = '閉じる';
+  closeButton.onclick = () => {
+    if (audio) {
+      audio.pause();
+    }
+    playbackState = 'idle';
+    container.remove();
+  };
+
+  // 音声の状態変更を監視
+  audio.addEventListener('play', updatePlayButtonText);
+  audio.addEventListener('pause', updatePlayButtonText);
 
   container.appendChild(playButton);
   container.appendChild(saveButton);
   container.appendChild(closeButton);
   document.body.appendChild(container);
-
-  playButton.onclick = () => {
-    audio.play()
-      .then(() => {
-        container.remove();
-        playbackState = 'playing';
-        resolve({ status: "playing" });
-      })
-      .catch(err => {
-        console.error('Play button click failed:', err);
-        alert('再生に失敗しました: ' + err.message);
-        playbackState = 'error';
-      });
-  };
-
-  saveButton.onclick = async () => {
-    try {
-      const blob = await fetch(audio.src).then(res => res.blob());
-      await db.saveAudio(blob, originalText);
-      alert('音声が保存されました');
-    } catch (error) {
-      console.error('Failed to save audio:', error);
-      alert('保存に失敗しました: ' + error.message);
-    }
-  };
-
-  closeButton.onclick = () => {
-    container.remove();
-    playbackState = 'idle';
-    resolve({ status: "cancelled" });
-  };
 }
