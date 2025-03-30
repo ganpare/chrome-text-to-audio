@@ -12,10 +12,10 @@ async function getFalApiKey() {
 // Function to show error in the active tab
 async function showErrorMessage(message) {
   try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tabs[0]?.id) {
-      await chrome.tabs.sendMessage(tabs[0].id, {
-        action: "showError",
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      await chrome.tabs.sendMessage(tab.id, {
+        action: 'showError',
         error: message
       });
     }
@@ -105,25 +105,29 @@ function createContextMenu() {
 chrome.runtime.onInstalled.addListener(createContextMenu);
 chrome.runtime.onStartup.addListener(createContextMenu);
 
+// オプションページを更新する関数
+async function refreshOptionsPage() {
+  try {
+    const optionsUrl = chrome.runtime.getURL('options.html');
+    const tabs = await chrome.tabs.query({ url: optionsUrl });
+    
+    if (tabs.length > 0) {
+      console.log('Refreshing options page...');
+      await chrome.tabs.reload(tabs[0].id);
+      console.log('Options page refreshed successfully');
+    } else {
+      console.log('Options page not found');
+    }
+  } catch (error) {
+    console.error('Failed to refresh options page:', error);
+  }
+}
+
 // メッセージリスナーの追加
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'refreshOptionsPage') {
-    // 非同期処理を即時実行関数で処理
-    (async () => {
-      try {
-        const tabs = await chrome.tabs.query({ url: request.optionsUrl });
-        if (tabs.length > 0) {
-          await chrome.tabs.reload(tabs[0].id);
-          sendResponse({ success: true });
-        } else {
-          sendResponse({ success: false, error: 'Options page not found' });
-        }
-      } catch (error) {
-        console.error('Failed to refresh options page:', error);
-        sendResponse({ success: false, error: error.message });
-      }
-    })();
-    return true; // 非同期レスポンスを待つことを示す
+    console.log('Received request to refresh options page');
+    refreshOptionsPage();
   }
 });
 
@@ -195,15 +199,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       }
 
       // 音声再生を試行
-      const responseMessage = await chrome.tabs.sendMessage(tab.id, {
+      await chrome.tabs.sendMessage(tab.id, {
         action: "playAudio",
         url: audioUrl,
         text: info.selectionText
       });
 
-      if (responseMessage?.status !== "playing") {
-        throw new Error('音声の再生に失敗しました');
-      }
     } catch (error) {
       await showErrorMessage(`エラーが発生しました: ${error.message}`);
     }
