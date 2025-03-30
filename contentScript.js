@@ -57,7 +57,84 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // テキスト情報を取得
       const text = message.text || '音声データ';
 
+      // 音声を再生（先に再生を行う）
+      console.log('Preparing audio for playback...');
+      let playbackComplete = false;
+      
+      const playAudioPromise = new Promise((resolve, reject) => {
+        try {
+          const blobUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio();
+          
+          // 再生のためのイベントリスナーを設定
+          let playbackStarted = false;
+          
+          // 再生準備完了イベント
+          audio.oncanplaythrough = () => {
+            console.log('Audio is ready to play');
+            // 一度だけ再生を開始
+            if (!playbackStarted) {
+              playbackStarted = true;
+              console.log('Starting audio playback...');
+              try {
+                audio.play()
+                  .catch(error => {
+                    console.error('Audio play promise rejected:', error);
+                    showError(`音声の再生に失敗しました: ${error.message}`);
+                    URL.revokeObjectURL(blobUrl);
+                    reject(error);
+                  });
+              } catch (innerError) {
+                console.error('Error starting playback:', innerError);
+                showError(`音声の再生開始に失敗しました: ${innerError.message}`);
+                URL.revokeObjectURL(blobUrl);
+                reject(innerError);
+              }
+            }
+          };
+
+          audio.onended = () => {
+            console.log('Audio playback ended');
+            playbackComplete = true;
+            URL.revokeObjectURL(blobUrl);
+            resolve();
+          };
+
+          audio.onerror = (error) => {
+            console.error('Audio playback error:', error);
+            URL.revokeObjectURL(blobUrl);
+            showError(`音声の再生中にエラーが発生しました: ${error.message || '不明なエラー'}`);
+            reject(error);
+          };
+
+          // ソースを設定して読み込み開始
+          audio.src = blobUrl;
+          audio.load();
+          
+          // 10秒以上再生が始まらなかった場合のタイムアウト処理
+          setTimeout(() => {
+            if (!playbackStarted) {
+              console.warn('Audio playback timeout');
+              showError('音声の読み込みがタイムアウトしました');
+              URL.revokeObjectURL(blobUrl);
+              reject(new Error('Audio playback timeout'));
+            }
+          }, 10000);
+        } catch (playError) {
+          console.error('Caught error during audio playback setup:', playError);
+          showError(`音声の再生準備中にエラーが発生しました: ${playError.message}`);
+          reject(playError);
+        }
+      });
+
+      // 通知を表示
+      showSuccessNotification('音声の再生を開始しました');
+      
+      // 音声の再生が完了した後にデータベースへ保存する
+      await playAudioPromise;
+      
       try {
+        console.log('音声再生完了、データベースに保存を開始します');
         // データベースに音声を保存
         const audioId = await db.saveAudio(audioBlob, text);
         console.log('Audio saved successfully with ID:', audioId);
@@ -81,64 +158,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         showError(`データベースへの保存に失敗しました: ${dbError.message}`);
       }
 
-      // 音声を再生
-      try {
-        console.log('Preparing audio for playback...');
-        const blobUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio();
-        
-        // 再生のためのイベントリスナーを設定
-        let playbackStarted = false;
-        
-        // 再生準備完了イベント
-        audio.oncanplaythrough = () => {
-          console.log('Audio is ready to play');
-          // 一度だけ再生を開始
-          if (!playbackStarted) {
-            playbackStarted = true;
-            console.log('Starting audio playback...');
-            try {
-              audio.play()
-                .catch(error => {
-                  console.error('Audio play promise rejected:', error);
-                  showError(`音声の再生に失敗しました: ${error.message}`);
-                  URL.revokeObjectURL(blobUrl);
-                });
-            } catch (innerError) {
-              console.error('Error starting playback:', innerError);
-              showError(`音声の再生開始に失敗しました: ${innerError.message}`);
-              URL.revokeObjectURL(blobUrl);
-            }
-          }
-        };
-
-        audio.onended = () => {
-          console.log('Audio playback ended');
-          URL.revokeObjectURL(blobUrl);
-        };
-
-        audio.onerror = (error) => {
-          console.error('Audio playback error:', error);
-          URL.revokeObjectURL(blobUrl);
-          showError(`音声の再生中にエラーが発生しました: ${error.message || '不明なエラー'}`);
-        };
-
-        // ソースを設定して読み込み開始
-        audio.src = blobUrl;
-        audio.load();
-        
-        // 10秒以上再生が始まらなかった場合のタイムアウト処理
-        setTimeout(() => {
-          if (!playbackStarted) {
-            console.warn('Audio playback timeout');
-            showError('音声の読み込みがタイムアウトしました');
-            URL.revokeObjectURL(blobUrl);
-          }
-        }, 10000);
-      } catch (playError) {
-        console.error('Caught error during audio playback setup:', playError);
-        showError(`音声の再生準備中にエラーが発生しました: ${playError.message}`);
-      }
+      // 音声再生は上の処理に統合しました
 
       // 通知を表示
       showSuccessNotification('音声の再生を開始しました');
