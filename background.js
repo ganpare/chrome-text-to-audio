@@ -110,7 +110,7 @@ async function refreshOptionsPage() {
   try {
     const optionsUrl = chrome.runtime.getURL('options.html');
     const tabs = await chrome.tabs.query({ url: optionsUrl });
-    
+
     if (tabs.length > 0) {
       console.log('Refreshing options page...');
       await chrome.tabs.reload(tabs[0].id);
@@ -124,37 +124,55 @@ async function refreshOptionsPage() {
 }
 
 // メッセージリスナーの追加
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'refreshOptionsPage') {
-    // 非同期処理を即時実行関数で処理
-    (async () => {
-      try {
-        const optionsUrl = chrome.runtime.getURL('options.html');
-        // パターンマッチングを使用してオプションページを検索
-        const tabs = await chrome.tabs.query({});
-        
-        // オプションページを探す
-        const optionsTab = tabs.find(tab => 
-          tab.url && (tab.url.includes(optionsUrl) || 
-          tab.url.includes(`chrome-extension://${chrome.runtime.id}/options.html`))
-        );
-        
-        if (optionsTab) {
-          console.log('Found options page, reloading:', optionsTab.id);
-          await chrome.tabs.reload(optionsTab.id);
-          sendResponse({ success: true });
-        } else {
-          console.log('Options page not found. URLs tried:', optionsUrl);
-          sendResponse({ success: false, error: 'Options page not found' });
-        }
-      } catch (error) {
-        console.error('Failed to refresh options page:', error);
-        sendResponse({ success: false, error: error.message });
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Received message in background script:', message);
+
+  if (message.action === 'refreshOptionsPage') {
+    // まずオプションページをチェック
+    chrome.tabs.query({url: chrome.runtime.getURL('options.html')}, optionsTabs => {
+      if (optionsTabs.length > 0) {
+        // オプションページが開いている場合はメッセージを送信
+        chrome.tabs.sendMessage(optionsTabs[0].id, {
+          action: 'refreshOptionsPage'
+        }, response => {
+          if (chrome.runtime.lastError) {
+            console.log('Error sending message to options page:', chrome.runtime.lastError);
+            // 次に履歴ページをチェック
+            checkHistoryPage(sendResponse);
+          } else {
+            sendResponse({success: true, target: 'options'});
+          }
+        });
+      } else {
+        // オプションページが開いていない場合は履歴ページをチェック
+        checkHistoryPage(sendResponse);
       }
-    })();
-    return true; // 非同期レスポンスを待つことを示す
+    });
+    return true; // 非同期レスポンスのために true を返す
   }
 });
+
+// 履歴ページをチェックして通知する
+function checkHistoryPage(sendResponse) {
+  chrome.tabs.query({url: chrome.runtime.getURL('history.html')}, historyTabs => {
+    if (historyTabs.length > 0) {
+      // 履歴ページが開いている場合はメッセージを送信
+      chrome.tabs.sendMessage(historyTabs[0].id, {
+        action: 'refreshHistoryPage'
+      }, response => {
+        if (chrome.runtime.lastError) {
+          console.log('Error sending message to history page:', chrome.runtime.lastError);
+          sendResponse({success: false, error: 'No active pages found'});
+        } else {
+          sendResponse({success: true, target: 'history'});
+        }
+      });
+    } else {
+      // どちらのページも開いていない場合
+      sendResponse({success: false, error: 'No active pages found'});
+    }
+  });
+}
 
 // コンテキストメニューのクリックイベント処理
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

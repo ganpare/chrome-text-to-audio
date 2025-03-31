@@ -10,21 +10,36 @@ try {
 }
 let isProcessing = false;
 
-// オプションページを更新する関数
+// オプションページや履歴ページを更新する関数
 async function refreshOptionsPage() {
   try {
-    const optionsUrl = chrome.runtime.getURL('options.html');
-    // backgroundスクリプトに処理を委譲
+    // バックグラウンドスクリプトに処理を委譲
     const response = await chrome.runtime.sendMessage({ 
       action: 'refreshOptionsPage',
-      optionsUrl: optionsUrl 
+      timestamp: Date.now()
     });
+    
     if (!response || !response.success) {
-      throw new Error(response?.error || 'Failed to refresh options page');
+      console.log('Options page not found, trying to open history page');
+      
+      // オプションページが見つからない場合、履歴ページを開く
+      const historyUrl = chrome.runtime.getURL('history.html');
+      chrome.tabs.create({ url: historyUrl });
     }
+    
+    return true;
   } catch (error) {
-    console.log('Failed to refresh options page:', error);
-    throw error; // エラーを上位に伝播させる
+    console.log('Failed to refresh pages:', error);
+    
+    // 履歴ページを開いてみる
+    try {
+      const historyUrl = chrome.runtime.getURL('history.html');
+      chrome.tabs.create({ url: historyUrl });
+      return true;
+    } catch (e) {
+      console.error('Failed to open history page:', e);
+      throw error; // エラーを上位に伝播させる
+    }
   }
 }
 

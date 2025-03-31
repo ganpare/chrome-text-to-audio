@@ -298,6 +298,19 @@ button {
   margin-right: 4px;
 }
 
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rotating {
+  animation: rotate 1.5s linear infinite;
+}
+
 .api-input-container {
   display: flex;
   gap: 10px;
