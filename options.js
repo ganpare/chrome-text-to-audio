@@ -69,6 +69,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadAudioList(searchInput.value);
       }, 300);
     });
+    
+    // 更新ボタンの実装
+    const refreshButton = document.getElementById('refreshButton');
+    refreshButton.addEventListener('click', async () => {
+      try {
+        refreshButton.disabled = true;
+        refreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
+        console.log('Manual refresh requested');
+        
+        // データベース接続を確認・リフレッシュ
+        await db.openDB();
+        await loadAudioList(searchInput.value);
+        
+        showStatus('音声一覧を更新しました', 'success');
+      } catch (error) {
+        console.error('Failed to refresh audio list:', error);
+        showStatus('更新に失敗しました: ' + error.message, 'error');
+      } finally {
+        refreshButton.disabled = false;
+        refreshButton.innerHTML = '<i class="material-icons">refresh</i>更新';
+      }
+    });
 
     // 初期データ読み込み
     console.log('Starting initial audio list load');

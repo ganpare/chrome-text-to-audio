@@ -36,9 +36,15 @@
         <i class="material-icons">library_music</i>
         保存済み音声一覧
       </h2>
-      <div class="search-bar">
-        <i class="material-icons">search</i>
-        <input type="text" id="searchInput" placeholder="テキストを検索...">
+      <div class="audio-list-actions">
+        <div class="search-bar">
+          <i class="material-icons">search</i>
+          <input type="text" id="searchInput" placeholder="テキストを検索...">
+        </div>
+        <button id="refreshButton" class="refresh-button">
+          <i class="material-icons">refresh</i>
+          更新
+        </button>
       </div>
       <div id="audioList" class="audio-list"></div>
       <div class="loading">
