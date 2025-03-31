@@ -3,6 +3,22 @@ let currentAudio = null;
 let currentAudioId = null;
 let audioFiles = [];
 
+// メッセージリスナーを設定
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Received message in options page:', message);
+  
+  if (message.action === 'refreshOptionsPage') {
+    console.log('Refreshing options page from message');
+    loadAudioList().then(() => {
+      sendResponse({ success: true });
+    }).catch(error => {
+      console.error('Error refreshing options page:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+    return true; // 非同期レスポンスのために true を返す
+  }
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM Content Loaded - Initializing options page');
   
@@ -58,6 +74,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Starting initial audio list load');
     await loadAudioList();
     console.log('Initial audio list load completed');
+    
+    // 定期的な更新 (10秒ごと)
+    setInterval(async () => {
+      console.log('Refreshing audio list...');
+      await loadAudioList();
+    }, 10000);
+    
+    // ページがフォーカスされたときに更新
+    window.addEventListener('focus', async () => {
+      console.log('Page focused, refreshing audio list');
+      await loadAudioList();
+    });
   } catch (error) {
     console.error('Error during initialization:', error);
     showStatus('初期化中にエラーが発生しました: ' + error.message, 'error');
@@ -84,6 +112,14 @@ async function loadAudioList(searchQuery = '') {
   if (!audioList) {
     console.error('audioList element not found');
     return;
+  }
+  
+  // データベースの現在の状態をログ
+  try {
+    const dbState = await db.checkDatabaseState();
+    console.log('Current database state:', dbState);
+  } catch (e) {
+    console.warn('Failed to check database state:', e);
   }
 
   try {

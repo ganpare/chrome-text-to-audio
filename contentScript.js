@@ -141,9 +141,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
         // オプションページを更新
         try {
-          chrome.runtime.sendMessage({ action: 'refreshOptionsPage' }, (response) => {
+          // 開いているオプションページを探してメッセージを送信
+          const optionsUrl = chrome.runtime.getURL('options.html');
+          console.log('Sending refresh message to options page');
+          
+          chrome.runtime.sendMessage({ 
+            action: 'refreshOptionsPage',
+            timestamp: Date.now() // タイムスタンプを追加して毎回異なるメッセージにする
+          }, (response) => {
             if (chrome.runtime.lastError) {
-              console.log('Refresh message error:', chrome.runtime.lastError);
+              console.log('Refresh message error (expected if options not open):', chrome.runtime.lastError);
               return;
             }
             console.log('Refresh options page response:', response);
