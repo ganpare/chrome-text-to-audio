@@ -8,13 +8,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Received message in options page:', message);
   
   if (message.action === 'refreshOptionsPage') {
-    console.log('Refreshing options page from message');
-    loadAudioList().then(() => {
-      sendResponse({ success: true });
-    }).catch(error => {
-      console.error('Error refreshing options page:', error);
-      sendResponse({ success: false, error: error.message });
-    });
+    console.log('Refreshing options page from message with timestamp:', message.timestamp);
+    
+    // すぐに成功応答を返す（非同期処理が完了する前に）
+    sendResponse({ success: true });
+    
+    // 少し遅延させてからデータを読み込む（データベースの書き込みが完了するのを待つ）
+    setTimeout(async () => {
+      try {
+        console.log('Delayed refresh starting now');
+        // データベース接続を再確認
+        await db.openDB();
+        await loadAudioList();
+        console.log('Delayed refresh completed successfully');
+        showStatus('最新の音声データを読み込みました', 'success');
+      } catch (error) {
+        console.error('Error in delayed refresh:', error);
+        showStatus('更新中にエラーが発生しました: ' + error.message, 'error');
+      }
+    }, 1000); // 1秒遅延
+    
     return true; // 非同期レスポンスのために true を返す
   }
 });
@@ -148,25 +161,66 @@ async function loadAudioList(searchQuery = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
+    // データベース接続を確実に更新
+    await db.openDB();
     console.log('Fetching audio list from database...');
     audioFiles = await db.getAudioList();
-    console.log('Retrieved audio files:', audioFiles);
+    console.log('Retrieved audio files:', audioFiles.length, 'items');
+
+    // データが見つからない場合はもう一度試行
+    if (audioFiles.length === 0) {
+      console.log('No audio files found, trying once more...');
+      await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
+      await db.openDB(); // 接続を更新
+      audioFiles = await db.getAudioList();
+      console.log('Second attempt - Retrieved audio files:', audioFiles.length, 'items');
+    }
 
     const filteredFiles = searchQuery
       ? audioFiles.filter(audio => 
           audio.text.toLowerCase().includes(searchQuery.toLowerCase()))
       : audioFiles;
     
-    console.log('Filtered audio files:', filteredFiles);
+    console.log('Filtered audio files:', filteredFiles.length, 'items');
 
     if (filteredFiles.length === 0) {
-      console.log('No audio files found');
+      console.log('No audio files found after filtering');
       audioList.innerHTML = `
         <div class="empty-state">
           <i class="material-icons">music_off</i>
           <p>${searchQuery ? '検索結果が見つかりません' : '保存された音声はありません'}</p>
+          <button id="forceRefreshButton" class="refresh-button" style="margin-top: 15px;">
+            <i class="material-icons">refresh</i>強制更新
+          </button>
         </div>
       `;
+      
+      // 強制更新ボタンのイベントリスナーを追加
+      const forceRefreshButton = document.getElementById('forceRefreshButton');
+      if (forceRefreshButton) {
+        forceRefreshButton.addEventListener('click', async () => {
+          try {
+            forceRefreshButton.disabled = true;
+            forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
+            
+            // データベース接続を完全に更新
+            db = AudioDatabase.getInstance();
+            await db.openDB();
+            await loadAudioList();
+            
+            showStatus('音声一覧を強制更新しました', 'success');
+          } catch (error) {
+            console.error('Failed to refresh audio list:', error);
+            showStatus('更新に失敗しました: ' + error.message, 'error');
+          } finally {
+            if (forceRefreshButton) {
+              forceRefreshButton.disabled = false;
+              forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>強制更新';
+            }
+          }
+        });
+      }
+      
       return;
     }
 
@@ -177,7 +231,7 @@ async function loadAudioList(searchQuery = '') {
 
     console.log('Rendering audio items...');
     for (const audio of filteredFiles) {
-      console.log('Creating element for audio:', audio);
+      // console.log('Creating element for audio:', audio);
       const item = document.createElement('div');
       item.className = 'audio-item';
       item.dataset.audioId = audio.id;
@@ -286,14 +340,45 @@ async function loadAudioList(searchQuery = '') {
       item.appendChild(controls);
       audioList.appendChild(item);
     }
+    
+    showStatus(`${filteredFiles.length}件の音声データを読み込みました`, 'success');
   } catch (error) {
     console.error('Error in loadAudioList:', error);
     audioList.innerHTML = `
       <div class="empty-state">
         <i class="material-icons">error</i>
         <p>音声の読み込みに失敗しました: ${error.message}</p>
+        <button id="forceRefreshButton" class="refresh-button" style="margin-top: 15px;">
+          <i class="material-icons">refresh</i>強制更新
+        </button>
       </div>
     `;
+    
+    // 強制更新ボタンのイベントリスナーを追加
+    const forceRefreshButton = document.getElementById('forceRefreshButton');
+    if (forceRefreshButton) {
+      forceRefreshButton.addEventListener('click', async () => {
+        try {
+          forceRefreshButton.disabled = true;
+          forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
+          
+          // データベース接続を完全に更新
+          db = AudioDatabase.getInstance();
+          await db.openDB();
+          await loadAudioList();
+          
+          showStatus('音声一覧を強制更新しました', 'success');
+        } catch (error) {
+          console.error('Failed to refresh audio list:', error);
+          showStatus('更新に失敗しました: ' + error.message, 'error');
+        } finally {
+          if (forceRefreshButton) {
+            forceRefreshButton.disabled = false;
+            forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>強制更新';
+          }
+        }
+      });
+    }
   } finally {
     loading.classList.remove('active');
   }
