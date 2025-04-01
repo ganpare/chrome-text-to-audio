@@ -136,23 +136,34 @@ async function loadAudioList(searchQuery = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
-    // データベース接続を確実に更新
-    await db.openDB();
+    // データベース接続を完全に更新 (強制的に再作成)
+    db = AudioDatabase.getInstance();
+    await db.openDB(true); // 強制的に再オープン
     console.log('Fetching audio list from database...');
-    audioFiles = await db.getAudioList();
-    console.log('Retrieved audio files:', audioFiles.length, 'items');
 
-    // データが見つからない場合はもう一度試行
-    if (audioFiles.length === 0) {
-      console.log('No audio files found, trying once more...');
-      await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
-      await db.openDB(); // 接続を更新
+    // 複数回試行するための準備
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries && (!audioFiles || audioFiles.length === 0)) {
+      console.log(`Getting audio list (attempt ${retryCount + 1}/${maxRetries})...`);
       audioFiles = await db.getAudioList();
-      console.log('Second attempt - Retrieved audio files:', audioFiles.length, 'items');
+      console.log(`Attempt ${retryCount + 1}: Retrieved audio files:`, audioFiles.length, 'items');
+
+      if (audioFiles.length > 0) {
+        break; // データが見つかったらループを抜ける
+      }
+
+      retryCount++;
+      if (retryCount < maxRetries) {
+        console.log(`No audio files found, waiting before next attempt...`);
+        await new Promise(resolve => setTimeout(resolve, 500)); // 次の試行前に少し待機
+      }
     }
 
+
     const filteredFiles = searchQuery
-      ? audioFiles.filter(audio => 
+      ? audioFiles.filter(audio =>
           audio.text.toLowerCase().includes(searchQuery.toLowerCase()))
       : audioFiles;
 
@@ -200,7 +211,7 @@ async function loadAudioList(searchQuery = '') {
     }
 
     // 日付でソート（新しい順）
-    filteredFiles.sort((a, b) => 
+    filteredFiles.sort((a, b) =>
       new Date(b.timestamp) - new Date(a.timestamp)
     );
 
@@ -411,7 +422,7 @@ async function playAudio(blob) {
 
 // 前の音声を再生
 async function playPreviousAudio(currentId) {
-  const sortedFiles = [...audioFiles].sort((a, b) => 
+  const sortedFiles = [...audioFiles].sort((a, b) =>
     new Date(b.timestamp) - new Date(a.timestamp)
   );
   const currentIndex = sortedFiles.findIndex(audio => audio.id === currentId);
@@ -433,7 +444,7 @@ async function playPreviousAudio(currentId) {
 
 // 次の音声を再生
 async function playNextAudio(currentId) {
-  const sortedFiles = [...audioFiles].sort((a, b) => 
+  const sortedFiles = [...audioFiles].sort((a, b) =>
     new Date(b.timestamp) - new Date(a.timestamp)
   );
   const currentIndex = sortedFiles.findIndex(audio => audio.id === currentId);

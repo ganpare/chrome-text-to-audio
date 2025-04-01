@@ -322,54 +322,87 @@ class AudioDatabase {
   // 保存された音声の一覧を取得（blobデータを含める）
   async getAudioList() {
     console.log('getAudioList called');
-    const db = await this.openDB();
-    return new Promise((resolve, reject) => {
+    
+    // 複数回試行するためのロジック
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
       try {
-        console.log('Starting transaction for getAudioList');
-        const transaction = db.transaction(['audios'], 'readonly');
-        const store = transaction.objectStore('audios');
-        const request = store.getAll();
-
-        request.onsuccess = () => {
-          const result = request.result;
-          console.log('Raw database results:', result.length, 'items found');
-
-          // blobデータも含めて返す
-          const audioFiles = result.map(audio => ({
-            id: audio.id,
-            text: audio.text,
-            timestamp: audio.timestamp,
-            duration: audio.duration,
-            fileSize: audio.fileSize,
-            blob: audio.blob // blobデータも含める
-          }));
-
-          console.log('Processed audio files:', audioFiles.length, 'items with blob data');
-          
-          // blobデータの有無を確認
-          const blobCount = audioFiles.filter(audio => audio.blob).length;
-          console.log(`Number of audio files with blob data: ${blobCount}/${audioFiles.length}`);
-          
-          resolve(audioFiles);
-        };
-
-        request.onerror = () => {
-          console.error('Error in getAudioList:', request.error);
-          reject(request.error);
-        };
-
-        transaction.oncomplete = () => {
-          console.log('Transaction completed successfully');
-        };
-
-        transaction.onerror = () => {
-          console.error('Transaction error:', transaction.error);
-        };
+        // 毎回データベース接続を更新
+        const db = await this.openDB(retryCount > 0); // 2回目以降は強制的に再オープン
+        
+        console.log(`Starting transaction for getAudioList (attempt ${retryCount + 1}/${maxRetries})`);
+        
+        const result = await new Promise((resolve, reject) => {
+          try {
+            const transaction = db.transaction(['audios'], 'readonly');
+            const store = transaction.objectStore('audios');
+            const request = store.getAll();
+            
+            request.onsuccess = () => {
+              resolve(request.result);
+            };
+            
+            request.onerror = (event) => {
+              console.error(`Error in getAudioList request (attempt ${retryCount + 1}):`, event.target.error);
+              reject(event.target.error);
+            };
+            
+            transaction.oncomplete = () => {
+              console.log('Transaction completed successfully');
+            };
+            
+            transaction.onerror = (event) => {
+              console.error('Transaction error:', event.target.error);
+            };
+          } catch (innerError) {
+            console.error(`Inner transaction error (attempt ${retryCount + 1}):`, innerError);
+            reject(innerError);
+          }
+        });
+        
+        console.log(`Raw database results (attempt ${retryCount + 1}):`, result.length, 'items found');
+        
+        // blobデータも含めて返す
+        const audioFiles = result.map(audio => ({
+          id: audio.id,
+          text: audio.text,
+          timestamp: audio.timestamp,
+          duration: audio.duration,
+          fileSize: audio.fileSize,
+          blob: audio.blob // blobデータも含める
+        }));
+        
+        console.log(`Processed audio files (attempt ${retryCount + 1}):`, audioFiles.length, 'items');
+        
+        // blobデータの有無を確認
+        const blobCount = audioFiles.filter(audio => audio.blob).length;
+        console.log(`Number of audio files with blob data: ${blobCount}/${audioFiles.length}`);
+        
+        // 各アイテムのIDをログ
+        if (audioFiles.length > 0) {
+          console.log('Audio file IDs:', audioFiles.map(audio => audio.id));
+        }
+        
+        return audioFiles;
+        
       } catch (error) {
-        console.error('Error in getAudioList transaction:', error);
-        reject(error);
+        console.error(`Error in getAudioList (attempt ${retryCount + 1}):`, error);
+        retryCount++;
+        
+        if (retryCount >= maxRetries) {
+          console.error('All getAudioList attempts failed');
+          throw new Error(`音声リストの取得に失敗しました: ${error.message}`);
+        }
+        
+        // 次の試行前に少し待機
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
-    });
+    }
+    
+    // すべての試行が失敗した場合（通常ここには到達しない）
+    return [];
   }
 
   // 特定のIDの音声を取得
