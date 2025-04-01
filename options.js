@@ -6,35 +6,44 @@ let audioFiles = [];
 // メッセージリスナーを設定
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Received message in options page:', message);
-  
+
   if (message.action === 'refreshOptionsPage') {
     console.log('Refreshing options page from message with timestamp:', message.timestamp);
-    
+
     // すぐに成功応答を返す（非同期処理が完了する前に）
     sendResponse({ success: true });
-    
+
     // 少し遅延させてからデータを読み込む（データベースの書き込みが完了するのを待つ）
     setTimeout(async () => {
       try {
         console.log('Delayed refresh starting now');
-        // データベース接続を再確認
-        await db.openDB();
+        // データベース接続を強制的に更新
+        await db.openDB(true); // 強制的に再オープン
+        // データベースの状態を確認
+        const dbState = await db.checkDatabaseState();
+        console.log('Database state before refresh:', dbState);
+        // 音声リストを再読み込み
         await loadAudioList();
         console.log('Delayed refresh completed successfully');
         showStatus('最新の音声データを読み込みました', 'success');
       } catch (error) {
         console.error('Error in delayed refresh:', error);
         showStatus('更新中にエラーが発生しました: ' + error.message, 'error');
+        // エラー発生時は強制的にページをリロード
+        if (message.force) {
+          console.log('Force refreshing page due to error...');
+          location.reload();
+        }
       }
-    }, 1000); // 1秒遅延
-    
+    }, 1500); // 1.5秒遅延（少し長めに）
+
     return true; // 非同期レスポンスのために true を返す
   }
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM Content Loaded - Initializing options page');
-  
+
   try {
     // データベースの状態を詳細に確認
     const dbState = await db.checkDatabaseState();
@@ -82,7 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadAudioList(searchInput.value);
       }, 300);
     });
-    
+
     // 更新ボタンの実装
     const refreshButton = document.getElementById('refreshButton');
     refreshButton.addEventListener('click', async () => {
@@ -90,11 +99,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshButton.disabled = true;
         refreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
         console.log('Manual refresh requested');
-        
+
         // データベース接続を確認・リフレッシュ
         await db.openDB();
         await loadAudioList(searchInput.value);
-        
+
         showStatus('音声一覧を更新しました', 'success');
       } catch (error) {
         console.error('Failed to refresh audio list:', error);
@@ -109,13 +118,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Starting initial audio list load');
     await loadAudioList();
     console.log('Initial audio list load completed');
-    
+
     // 定期的な更新 (10秒ごと)
     setInterval(async () => {
       console.log('Refreshing audio list...');
       await loadAudioList();
     }, 10000);
-    
+
     // ページがフォーカスされたときに更新
     window.addEventListener('focus', async () => {
       console.log('Page focused, refreshing audio list');
@@ -148,7 +157,7 @@ async function loadAudioList(searchQuery = '') {
     console.error('audioList element not found');
     return;
   }
-  
+
   // データベースの現在の状態をログ
   try {
     const dbState = await db.checkDatabaseState();
@@ -180,7 +189,7 @@ async function loadAudioList(searchQuery = '') {
       ? audioFiles.filter(audio => 
           audio.text.toLowerCase().includes(searchQuery.toLowerCase()))
       : audioFiles;
-    
+
     console.log('Filtered audio files:', filteredFiles.length, 'items');
 
     if (filteredFiles.length === 0) {
@@ -194,7 +203,7 @@ async function loadAudioList(searchQuery = '') {
           </button>
         </div>
       `;
-      
+
       // 強制更新ボタンのイベントリスナーを追加
       const forceRefreshButton = document.getElementById('forceRefreshButton');
       if (forceRefreshButton) {
@@ -202,12 +211,12 @@ async function loadAudioList(searchQuery = '') {
           try {
             forceRefreshButton.disabled = true;
             forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
-            
+
             // データベース接続を完全に更新
             db = AudioDatabase.getInstance();
             await db.openDB();
             await loadAudioList();
-            
+
             showStatus('音声一覧を強制更新しました', 'success');
           } catch (error) {
             console.error('Failed to refresh audio list:', error);
@@ -220,7 +229,7 @@ async function loadAudioList(searchQuery = '') {
           }
         });
       }
-      
+
       return;
     }
 
@@ -242,11 +251,11 @@ async function loadAudioList(searchQuery = '') {
 
       const metadata = document.createElement('div');
       metadata.className = 'audio-metadata';
-      
+
       // メタデータの表示を改善
       const duration = audio.duration ? `${Math.round(audio.duration)}秒` : '不明';
       const fileSize = audio.fileSize ? `${(audio.fileSize / 1024).toFixed(1)}KB` : '不明';
-      
+
       metadata.innerHTML = `
         <div class="metadata-row">
           <i class="material-icons">schedule</i>
@@ -278,24 +287,24 @@ async function loadAudioList(searchQuery = '') {
         try {
           playButton.disabled = true;
           currentAudioId = audio.id;
-          
+
           // データベースから音声データを取得
           console.log('Fetching audio data for ID:', audio.id);
           const audioData = await db.getAudio(audio.id);
-          
+
           if (!audioData) {
             throw new Error('音声データが見つかりません (データなし)');
           }
-          
+
           console.log('Audio data retrieved:', audioData);
-          
+
           if (!audioData.blob) {
             throw new Error('音声データが見つかりません (Blobなし)');
           }
-          
+
           // 音声を再生
           const success = await playAudio(audioData.blob);
-          
+
           if (success) {
             playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
           }
@@ -340,7 +349,7 @@ async function loadAudioList(searchQuery = '') {
       item.appendChild(controls);
       audioList.appendChild(item);
     }
-    
+
     showStatus(`${filteredFiles.length}件の音声データを読み込みました`, 'success');
   } catch (error) {
     console.error('Error in loadAudioList:', error);
@@ -353,7 +362,7 @@ async function loadAudioList(searchQuery = '') {
         </button>
       </div>
     `;
-    
+
     // 強制更新ボタンのイベントリスナーを追加
     const forceRefreshButton = document.getElementById('forceRefreshButton');
     if (forceRefreshButton) {
@@ -361,12 +370,12 @@ async function loadAudioList(searchQuery = '') {
         try {
           forceRefreshButton.disabled = true;
           forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
-          
+
           // データベース接続を完全に更新
           db = AudioDatabase.getInstance();
           await db.openDB();
           await loadAudioList();
-          
+
           showStatus('音声一覧を強制更新しました', 'success');
         } catch (error) {
           console.error('Failed to refresh audio list:', error);
@@ -391,16 +400,16 @@ async function playAudio(blob) {
     URL.revokeObjectURL(currentAudio.src);
     currentAudio = null;
   }
-  
+
   try {
     if (!blob) {
       throw new Error('Blob data is missing');
     }
-    
+
     const blobUrl = URL.createObjectURL(blob);
     const audio = new Audio(blobUrl);
     currentAudio = audio;
-    
+
     audio.onended = () => {
       URL.revokeObjectURL(blobUrl);
       currentAudio = null;

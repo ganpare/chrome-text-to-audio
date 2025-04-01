@@ -161,6 +161,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 履歴ページとオプションページを非同期で更新
     setTimeout(async () => {
       try {
+        // 少し遅延させて実行（データベース操作完了を待つ）
+        await new Promise(resolve => setTimeout(resolve, 500));
         const results = await refreshAllActivePages(message);
         console.log('Page refresh results:', results);
       } catch (err) {
