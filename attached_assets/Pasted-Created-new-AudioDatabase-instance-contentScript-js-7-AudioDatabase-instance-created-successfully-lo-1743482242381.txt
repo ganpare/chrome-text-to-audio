@@ -1,0 +1,25 @@
+Created new AudioDatabase instance
+contentScript.js:7 AudioDatabase instance created successfully
+lockdown-install.js:1 Removing unpermitted intrinsics
+dbHelper.js:53 Database initialized successfully
+installation:1 Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.Understand this errorAI
+18Unchecked runtime.lastError: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was receivedUnderstand this errorAI
+installation:1 The resource https://nextjs.org/_next/static/css/4e76815e609c056f.css?dpl=dpl_9ANsQYsKRpEcJVy1c481w1N1s9Nx was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally.Understand this warningAI
+contentScript.js:55 Received playAudio message: Object
+contentScript.js:76 Preparing audio for playback...
+contentScript.js:89 Audio is ready to play
+contentScript.js:93 Starting audio playback...
+contentScript.js:112 Audio playback ended
+contentScript.js:152 音声再生完了、データベースに保存を開始します
+dbHelper.js:146 Saving audio to database...
+dbHelper.js:152 Saving audio: duration=0.33s, size=57644bytes
+dbHelper.js:73 Opening database connection...
+dbHelper.js:91 Existing database connection is valid
+dbHelper.js:181 Saving audio record to database...
+dbHelper.js:188 Audio saved successfully with ID: 6
+dbHelper.js:198 Transaction completed successfully
+contentScript.js:155 Audio saved successfully with ID: 6
+contentScript.js:161 Sending refresh message to options page
+contentScript.js:171 Refresh options page response: {success: false, error: 'No active pages found'}
+installation:1 The resource https://nextjs.org/_next/static/css/4e76815e609c056f.css?dpl=dpl_9ANsQYsKRpEcJVy1c481w1N1s9Nx was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally.Understand this warningAI
+installation:1 The resource https://nextjs.org/_next/static/css/4e76815e609c056f.css?dpl=dpl_9ANsQYsKRpEcJVy1c481w1N1s9Nx was preloaded using link preload but not used within a few seconds from the window's load event. Please make sure it has an appropriate `as` value and it is preloaded intentionally.
