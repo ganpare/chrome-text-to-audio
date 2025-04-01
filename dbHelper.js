@@ -319,7 +319,7 @@ class AudioDatabase {
     });
   }
 
-  // 保存された音声の一覧を取得（メタデータのみ）
+  // 保存された音声の一覧を取得（blobデータを含める）
   async getAudioList() {
     console.log('getAudioList called');
     const db = await this.openDB();
@@ -332,18 +332,24 @@ class AudioDatabase {
 
         request.onsuccess = () => {
           const result = request.result;
-          console.log('Raw database results:', result);
+          console.log('Raw database results:', result.length, 'items found');
 
+          // blobデータも含めて返す
           const audioFiles = result.map(audio => ({
             id: audio.id,
             text: audio.text,
             timestamp: audio.timestamp,
             duration: audio.duration,
-            fileSize: audio.fileSize
+            fileSize: audio.fileSize,
+            blob: audio.blob // blobデータも含める
           }));
 
-          console.log('Processed audio files:', audioFiles);
-          console.log('Number of audio files found:', audioFiles.length);
+          console.log('Processed audio files:', audioFiles.length, 'items with blob data');
+          
+          // blobデータの有無を確認
+          const blobCount = audioFiles.filter(audio => audio.blob).length;
+          console.log(`Number of audio files with blob data: ${blobCount}/${audioFiles.length}`);
+          
           resolve(audioFiles);
         };
 

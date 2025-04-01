@@ -113,6 +113,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshButton.innerHTML = '<i class="material-icons">refresh</i>更新';
       }
     });
+    
+    // データベースリセットボタンの実装
+    const resetDbButton = document.getElementById('resetDbButton');
+    resetDbButton.addEventListener('click', async () => {
+      if (confirm('データベースをリセットすると、保存された全ての音声データが削除されます。続行しますか？')) {
+        try {
+          resetDbButton.disabled = true;
+          resetDbButton.innerHTML = '<i class="material-icons">delete_forever</i>リセット中...';
+          
+          // データベースを削除して再作成
+          console.log('Deleting database...');
+          await db.deleteDatabase();
+          
+          // 新しいインスタンスを取得
+          db = AudioDatabase.getInstance();
+          await db.openDB();
+          
+          showStatus('データベースをリセットしました', 'success');
+          
+          // 音声リストを再読み込み
+          await loadAudioList();
+        } catch (error) {
+          console.error('Failed to reset database:', error);
+          showStatus('データベースのリセットに失敗しました: ' + error.message, 'error');
+        } finally {
+          resetDbButton.disabled = false;
+          resetDbButton.innerHTML = '<i class="material-icons">delete_forever</i>DBリセット';
+        }
+      }
+    });
 
     // 初期データ読み込み
     console.log('Starting initial audio list load');
@@ -175,6 +205,21 @@ async function loadAudioList(searchQuery = '') {
     console.log('Fetching audio list from database...');
     audioFiles = await db.getAudioList();
     console.log('Retrieved audio files:', audioFiles.length, 'items');
+    
+    // データの詳細なログ
+    if (audioFiles.length > 0) {
+      console.log('First audio item details:', {
+        id: audioFiles[0].id,
+        text: audioFiles[0].text ? audioFiles[0].text.substring(0, 30) + '...' : 'なし',
+        timestamp: audioFiles[0].timestamp,
+        hasBlob: !!audioFiles[0].blob,
+        blobSize: audioFiles[0].blob ? audioFiles[0].blob.size : 0
+      });
+      
+      // Blobデータを持つアイテムの数を確認
+      const itemsWithBlob = audioFiles.filter(item => !!item.blob).length;
+      console.log(`Items with blob data: ${itemsWithBlob}/${audioFiles.length}`);
+    }
 
     // データが見つからない場合はもう一度試行
     if (audioFiles.length === 0) {
@@ -288,25 +333,34 @@ async function loadAudioList(searchQuery = '') {
           playButton.disabled = true;
           currentAudioId = audio.id;
 
-          // データベースから音声データを取得
-          console.log('Fetching audio data for ID:', audio.id);
-          const audioData = await db.getAudio(audio.id);
+          // まずリストから取得したblobを使用
+          if (audio.blob) {
+            console.log('Using blob data from list for ID:', audio.id);
+            // 音声を再生
+            const success = await playAudio(audio.blob);
+            if (success) {
+              playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
+            }
+          } else {
+            // リストにない場合は個別に取得
+            console.log('Blob not in list, fetching audio data for ID:', audio.id);
+            const audioData = await db.getAudio(audio.id);
 
-          if (!audioData) {
-            throw new Error('音声データが見つかりません (データなし)');
-          }
+            if (!audioData) {
+              throw new Error('音声データが見つかりません (データなし)');
+            }
 
-          console.log('Audio data retrieved:', audioData);
+            console.log('Audio data retrieved:', audioData);
 
-          if (!audioData.blob) {
-            throw new Error('音声データが見つかりません (Blobなし)');
-          }
+            if (!audioData.blob) {
+              throw new Error('音声データが見つかりません (Blobなし)');
+            }
 
-          // 音声を再生
-          const success = await playAudio(audioData.blob);
-
-          if (success) {
-            playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
+            // 音声を再生
+            const success = await playAudio(audioData.blob);
+            if (success) {
+              playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
+            }
           }
         } catch (error) {
           console.error('Failed to play audio:', error);
