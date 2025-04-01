@@ -19,27 +19,39 @@ async function refreshOptionsPage() {
       timestamp: Date.now()
     });
     
-    if (!response || !response.success) {
-      console.log('Options page not found, trying to open history page');
-      
-      // オプションページが見つからない場合、履歴ページを開く
-      const historyUrl = chrome.runtime.getURL('history.html');
-      chrome.tabs.create({ url: historyUrl });
-    }
-    
-    return true;
-  } catch (error) {
-    console.log('Failed to refresh pages:', error);
-    
-    // 履歴ページを開いてみる
-    try {
-      const historyUrl = chrome.runtime.getURL('history.html');
-      chrome.tabs.create({ url: historyUrl });
+    if (response && response.success) {
+      console.log('Successfully refreshed options or history page');
       return true;
-    } catch (e) {
-      console.error('Failed to open history page:', e);
-      throw error; // エラーを上位に伝播させる
     }
+    
+    console.log('Active pages not found, opening history page...');
+    
+    try {
+      // 履歴ページを強制的に開く
+      const historyUrl = chrome.runtime.getURL('history.html');
+      await chrome.tabs.create({ url: historyUrl });
+      
+      // 少し待機して履歴ページが読み込まれるのを待つ
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 履歴ページが開かれたら更新メッセージを送信
+      await chrome.runtime.sendMessage({ 
+        action: 'refreshOptionsPage',
+        timestamp: Date.now()
+      });
+      
+      console.log('History page opened and refresh message sent');
+      return true;
+    } catch (tabError) {
+      console.error('Failed to open history tab:', tabError);
+      throw tabError;
+    }
+  } catch (error) {
+    console.error('Failed to refresh or open pages:', error);
+    
+    // 最後の手段として通知を表示
+    showSuccessNotification('音声が保存されました。履歴ページで確認できます。');
+    return false;
   }
 }
 

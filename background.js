@@ -105,21 +105,46 @@ function createContextMenu() {
 chrome.runtime.onInstalled.addListener(createContextMenu);
 chrome.runtime.onStartup.addListener(createContextMenu);
 
-// オプションページを更新する関数
+// オプションページまたは履歴ページを更新する関数
 async function refreshOptionsPage() {
   try {
     const optionsUrl = chrome.runtime.getURL('options.html');
-    const tabs = await chrome.tabs.query({ url: optionsUrl });
+    const historyUrl = chrome.runtime.getURL('history.html');
+    
+    // options.htmlまたはhistory.htmlを開いているタブを検索
+    const tabs = await chrome.tabs.query({ 
+      url: [optionsUrl, historyUrl]
+    });
 
     if (tabs.length > 0) {
-      console.log('Refreshing options page...');
-      await chrome.tabs.reload(tabs[0].id);
-      console.log('Options page refreshed successfully');
-    } else {
-      console.log('Options page not found');
+      console.log('Active pages found, refreshing...');
+      
+      // すべての該当タブにメッセージを送信
+      let successCount = 0;
+      for (const tab of tabs) {
+        try {
+          // タブにメッセージを送信
+          await chrome.tabs.sendMessage(tab.id, { 
+            action: 'refreshOptionsPage',
+            timestamp: Date.now()
+          });
+          successCount++;
+        } catch (tabError) {
+          console.warn(`Failed to send message to tab ${tab.id}:`, tabError);
+        }
+      }
+      
+      if (successCount > 0) {
+        console.log(`Successfully sent refresh messages to ${successCount} tabs`);
+        return { success: true, refreshedTabs: successCount };
+      }
     }
+    
+    console.log('No active pages found that can be refreshed');
+    return { success: false, error: 'No active pages found' };
   } catch (error) {
-    console.error('Failed to refresh options page:', error);
+    console.error('Failed to refresh pages:', error);
+    return { success: false, error: error.message };
   }
 }
 
