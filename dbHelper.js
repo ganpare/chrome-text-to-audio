@@ -69,8 +69,21 @@ class AudioDatabase {
     }
   }
 
-  async openDB() {
+  async openDB(forceReopen = false) {
     console.log('Opening database connection...');
+
+    // 強制的に再オープンする場合
+    if (forceReopen && this.db) {
+      try {
+        console.log('Force reopening database connection');
+        this.db.close();
+        this.db = null;
+        this.isInitialized = false;
+      } catch (error) {
+        console.warn('Error closing existing connection:', error);
+        // エラーは無視して続行
+      }
+    }
 
     // 初期化が完了するのを待つ
     if (!this.isInitialized) {
@@ -79,7 +92,9 @@ class AudioDatabase {
         await this.initPromise;
       } catch (error) {
         console.error('Error waiting for initialization:', error);
-        throw error;
+        // 初期化のやり直し
+        this.initPromise = this.init();
+        await this.initPromise;
       }
     }
 
@@ -98,47 +113,66 @@ class AudioDatabase {
     }
 
     // データベース接続の再作成
-    try {
-      return new Promise((resolve, reject) => {
-        console.log('Creating new database connection');
-        const request = indexedDB.open(this.dbName, this.dbVersion);
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`Creating new database connection (attempt ${retryCount + 1}/${maxRetries})`);
+        
+        const db = await new Promise((resolve, reject) => {
+          const request = indexedDB.open(this.dbName, this.dbVersion);
 
-        request.onupgradeneeded = (event) => {
-          console.log('Database upgrade needed (reopening)');
-          const db = event.target.result;
-          if (!db.objectStoreNames.contains('audios')) {
-            const store = db.createObjectStore('audios', { keyPath: 'id', autoIncrement: true });
-            store.createIndex('timestamp', 'timestamp', { unique: false });
-            store.createIndex('text', 'text', { unique: false });
-            console.log('Created audios object store (reopening)');
-          }
-        };
-
-        request.onerror = (event) => {
-          console.error('Error opening database:', event.target.error);
-          this.isInitialized = false;
-          reject(event.target.error);
-        };
-
-        request.onsuccess = (event) => {
-          this.db = event.target.result;
-          this.isInitialized = true;
-          console.log('Database reopened successfully');
-          
-          // データベース接続が切断された場合の処理
-          this.db.onversionchange = () => {
-            this.db.close();
-            console.log('Database connection closed due to version change');
-            this.isInitialized = false;
+          request.onupgradeneeded = (event) => {
+            console.log('Database upgrade needed (reopening)');
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('audios')) {
+              const store = db.createObjectStore('audios', { keyPath: 'id', autoIncrement: true });
+              store.createIndex('timestamp', 'timestamp', { unique: false });
+              store.createIndex('text', 'text', { unique: false });
+              console.log('Created audios object store (reopening)');
+            }
           };
-          
-          resolve(this.db);
-        };
-      });
-    } catch (error) {
-      console.error('Critical error reopening database:', error);
-      this.isInitialized = false;
-      throw error;
+
+          request.onerror = (event) => {
+            console.error(`Error opening database (attempt ${retryCount + 1}):`, event.target.error);
+            reject(event.target.error);
+          };
+
+          request.onsuccess = (event) => {
+            const db = event.target.result;
+            
+            // データベース接続が切断された場合の処理
+            db.onversionchange = () => {
+              db.close();
+              console.log('Database connection closed due to version change');
+              this.isInitialized = false;
+              this.db = null;
+            };
+            
+            resolve(db);
+          };
+        });
+        
+        // 成功した場合
+        this.db = db;
+        this.isInitialized = true;
+        console.log('Database connection established successfully');
+        return this.db;
+        
+      } catch (error) {
+        console.error(`Database connection attempt ${retryCount + 1} failed:`, error);
+        retryCount++;
+        
+        if (retryCount >= maxRetries) {
+          console.error('All database connection attempts failed');
+          this.isInitialized = false;
+          throw new Error(`データベース接続に失敗しました: ${error.message}`);
+        }
+        
+        // 次の試行の前に待機
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
   }
 

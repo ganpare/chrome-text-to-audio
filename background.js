@@ -150,53 +150,82 @@ async function refreshOptionsPage() {
 
 // メッセージリスナーの追加
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Received message in background script:', message);
+  console.log('Received message in background script:', message, 'from sender:', sender);
 
   if (message.action === 'refreshOptionsPage') {
-    // まずオプションページをチェック
-    chrome.tabs.query({url: chrome.runtime.getURL('options.html')}, optionsTabs => {
-      if (optionsTabs.length > 0) {
-        // オプションページが開いている場合はメッセージを送信
-        chrome.tabs.sendMessage(optionsTabs[0].id, {
-          action: 'refreshOptionsPage'
-        }, response => {
-          if (chrome.runtime.lastError) {
-            console.log('Error sending message to options page:', chrome.runtime.lastError);
-            // 次に履歴ページをチェック
-            checkHistoryPage(sendResponse);
-          } else {
-            sendResponse({success: true, target: 'options'});
-          }
-        });
-      } else {
-        // オプションページが開いていない場合は履歴ページをチェック
-        checkHistoryPage(sendResponse);
+    console.log('Processing refresh request, timestamp:', message.timestamp);
+    
+    // 即座に応答を返す（非同期処理が完了する前に）
+    sendResponse({success: true, message: 'Refresh request received'});
+    
+    // 履歴ページとオプションページを非同期で更新
+    setTimeout(async () => {
+      try {
+        const results = await refreshAllActivePages(message);
+        console.log('Page refresh results:', results);
+      } catch (err) {
+        console.error('Error refreshing pages:', err);
       }
-    });
+    }, 0);
+    
     return true; // 非同期レスポンスのために true を返す
   }
 });
 
-// 履歴ページをチェックして通知する
-function checkHistoryPage(sendResponse) {
-  chrome.tabs.query({url: chrome.runtime.getURL('history.html')}, historyTabs => {
-    if (historyTabs.length > 0) {
-      // 履歴ページが開いている場合はメッセージを送信
-      chrome.tabs.sendMessage(historyTabs[0].id, {
-        action: 'refreshHistoryPage'
-      }, response => {
-        if (chrome.runtime.lastError) {
-          console.log('Error sending message to history page:', chrome.runtime.lastError);
-          sendResponse({success: false, error: 'No active pages found'});
-        } else {
-          sendResponse({success: true, target: 'history'});
-        }
-      });
-    } else {
-      // どちらのページも開いていない場合
-      sendResponse({success: false, error: 'No active pages found'});
+// すべてのアクティブなページを更新
+async function refreshAllActivePages(message) {
+  const optionsUrl = chrome.runtime.getURL('options.html');
+  const historyUrl = chrome.runtime.getURL('history.html');
+  const results = { options: false, history: false };
+  
+  try {
+    // options.htmlとhistory.htmlを開いているタブを検索
+    const tabs = await chrome.tabs.query({ 
+      url: [optionsUrl + '*', historyUrl + '*']
+    });
+    
+    console.log('Found active page tabs:', tabs.length);
+    
+    if (tabs.length === 0) {
+      console.log('No active pages found');
+      return results;
     }
-  });
+    
+    // すべての該当タブに更新メッセージを送信
+    for (const tab of tabs) {
+      try {
+        console.log('Sending refresh message to tab:', tab.id, tab.url);
+        
+        const isOptionsPage = tab.url.includes('options.html');
+        const action = isOptionsPage ? 'refreshOptionsPage' : 'refreshHistoryPage';
+        
+        await new Promise((resolve) => {
+          chrome.tabs.sendMessage(tab.id, {
+            action: action,
+            timestamp: message.timestamp || Date.now(),
+            force: message.force || false
+          }, (response) => {
+            const error = chrome.runtime.lastError;
+            if (error) {
+              console.warn(`Failed to send message to tab ${tab.id}:`, error);
+              resolve(false);
+            } else {
+              console.log(`Successfully sent ${action} to tab ${tab.id}, response:`, response);
+              results[isOptionsPage ? 'options' : 'history'] = true;
+              resolve(true);
+            }
+          });
+        });
+      } catch (tabError) {
+        console.warn(`Error processing tab ${tab.id}:`, tabError);
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('Error in refreshAllActivePages:', error);
+    throw error;
+  }
 }
 
 // コンテキストメニューのクリックイベント処理

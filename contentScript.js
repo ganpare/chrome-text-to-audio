@@ -13,43 +13,39 @@ let isProcessing = false;
 // オプションページや履歴ページを更新する関数
 async function refreshOptionsPage() {
   try {
+    console.log('Attempting to refresh pages - timestamp:', Date.now());
+    
     // バックグラウンドスクリプトに処理を委譲
     const response = await chrome.runtime.sendMessage({ 
       action: 'refreshOptionsPage',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      force: true
     });
     
+    console.log('Refresh message response:', response);
+    
     if (response && response.success) {
-      console.log('Successfully refreshed options or history page');
+      console.log('Successfully refreshed pages with response:', response);
       return true;
     }
     
-    console.log('Active pages not found, opening history page...');
+    console.log('No active pages found that can be refreshed, trying to open history...');
     
+    // 最後の手段として通知を表示
+    showSuccessNotification('音声が保存されました。履歴ページで確認できます。');
+    
+    // 履歴ページを強制的に開く
     try {
-      // 履歴ページを強制的に開く
       const historyUrl = chrome.runtime.getURL('history.html');
       await chrome.tabs.create({ url: historyUrl });
-      
-      // 少し待機して履歴ページが読み込まれるのを待つ
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // 履歴ページが開かれたら更新メッセージを送信
-      await chrome.runtime.sendMessage({ 
-        action: 'refreshOptionsPage',
-        timestamp: Date.now()
-      });
-      
-      console.log('History page opened and refresh message sent');
+      console.log('History page opened successfully');
       return true;
     } catch (tabError) {
       console.error('Failed to open history tab:', tabError);
-      throw tabError;
+      return false;
     }
   } catch (error) {
-    console.error('Failed to refresh or open pages:', error);
-    
-    // 最後の手段として通知を表示
+    console.error('Failed to refresh pages:', error);
     showSuccessNotification('音声が保存されました。履歴ページで確認できます。');
     return false;
   }
