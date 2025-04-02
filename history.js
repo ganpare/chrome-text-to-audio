@@ -64,19 +64,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         (async () => {
           try {
             console.log('Starting database refresh...');
-            // データベース接続を再確認
-            await db.openDB();
+            
+            // 一度データベースの状態を確認
+            const dbState = await db.checkDatabaseState();
+            console.log('Current database state before refresh:', dbState);
+            
+            // データベース接続を強制的に再確認・更新
+            await db.openDB(true);
 
             // 強制更新の場合は少し待機
             if (message.force) {
               console.log('Forced refresh - waiting for DB operations to complete');
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5秒に延長
             }
 
-            // データを読み込む
-            await loadAudioList();
-            console.log('History page refreshed successfully');
-            showStatus('データを更新しました', 'success');
+            // データを複数回試行して読み込む
+            let retryCount = 0;
+            const maxRetries = 3;
+            let success = false;
+            
+            while (retryCount < maxRetries && !success) {
+              try {
+                console.log(`Loading audio list (attempt ${retryCount + 1}/${maxRetries})...`);
+                await loadAudioList();
+                console.log(`History page refreshed successfully (attempt ${retryCount + 1})`);
+                showStatus('データを更新しました', 'success');
+                success = true;
+              } catch (loadError) {
+                console.error(`Error loading audio list (attempt ${retryCount + 1}):`, loadError);
+                retryCount++;
+                
+                if (retryCount < maxRetries) {
+                  console.log('Waiting before next attempt...');
+                  await new Promise(resolve => setTimeout(resolve, 800)); // 800ms待機
+                } else {
+                  showStatus('更新中にエラーが発生しました: ' + loadError.message, 'error');
+                }
+              }
+            }
           } catch (err) {
             console.error('Error refreshing history page:', err);
             showStatus('更新中にエラーが発生しました: ' + err.message, 'error');

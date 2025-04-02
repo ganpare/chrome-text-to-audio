@@ -238,6 +238,28 @@ async function loadAudioList(searchQuery = '') {
         // Blobデータを持つアイテムの数を確認
         const itemsWithBlob = audioFiles.filter(item => !!item.blob).length;
         console.log(`Items with blob data: ${itemsWithBlob}/${audioFiles.length}`);
+
+        // Blobデータがない項目について再取得を試みる
+        if (itemsWithBlob < audioFiles.length) {
+          console.log('Some items missing blob data, attempting to retrieve them');
+          for (let i = 0; i < audioFiles.length; i++) {
+            if (!audioFiles[i].blob) {
+              try {
+                const fullData = await db.getAudio(audioFiles[i].id);
+                if (fullData && fullData.blob) {
+                  audioFiles[i].blob = fullData.blob;
+                  console.log(`Retrieved missing blob for item ID ${audioFiles[i].id}`);
+                }
+              } catch (e) {
+                console.warn(`Failed to retrieve blob for item ID ${audioFiles[i].id}:`, e);
+              }
+            }
+          }
+
+          // 再確認
+          const updatedItemsWithBlob = audioFiles.filter(item => !!item.blob).length;
+          console.log(`Updated items with blob data: ${updatedItemsWithBlob}/${audioFiles.length}`);
+        }
       }
 
       const filteredFiles = searchQuery

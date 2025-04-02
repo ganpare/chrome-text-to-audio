@@ -323,14 +323,18 @@ class AudioDatabase {
   async getAudioList() {
     console.log('getAudioList called');
     
+    // データベースの状態を確認
+    const dbState = await this.checkDatabaseState();
+    console.log('Database state before getAudioList:', dbState);
+    
     // 複数回試行するためのロジック
     let retryCount = 0;
     const maxRetries = 3;
     
     while (retryCount < maxRetries) {
       try {
-        // 毎回データベース接続を更新
-        const db = await this.openDB(retryCount > 0); // 2回目以降は強制的に再オープン
+        // 毎回データベース接続を更新、retry回数に関わらず強制的に再オープン
+        const db = await this.openDB(true); // 常に強制的に再オープン
         
         console.log(`Starting transaction for getAudioList (attempt ${retryCount + 1}/${maxRetries})`);
         
