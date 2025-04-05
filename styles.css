@@ -250,7 +250,16 @@ button {
 }
 
 .delete-button:hover {
-  background-color: #da190b;
+  background-color: #d32f2f;
+}
+
+.download-button {
+  background-color: #4caf50;
+  color: white;
+}
+
+.download-button:hover {
+  background-color: #388e3c;
 }
 
 .material-icons {

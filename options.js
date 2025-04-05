@@ -15,7 +15,7 @@ async function refreshDatabaseConnection(force = false) {
 // ボタンの状態を更新する共通関数
 function updateButtonState(button, isLoading, defaultText, loadingText, icon = 'refresh') {
   if (!button) return;
-  
+
   button.disabled = isLoading;
   button.innerHTML = `<i class="material-icons">${icon}</i>${isLoading ? loadingText : defaultText}`;
 }
@@ -122,6 +122,47 @@ function createAudioItem(audio, query) {
   // 次の音声ボタン
   const nextButton = createButton('nav-button next-button', 'skip_next', '', () => playNextAudio(audio.id), '次の音声');
 
+  // ダウンロードボタン
+  const downloadButton = createButton('download-button', 'download', 'ダウンロード', async () => {
+    try {
+      // blobデータを取得
+      let blob;
+      if (audio.blob) {
+        blob = audio.blob;
+      } else {
+        const audioData = await db.getAudio(audio.id);
+        if (!audioData || !audioData.blob) {
+          throw new Error('音声データが見つかりません');
+        }
+        blob = audioData.blob;
+      }
+
+      // ファイル名を生成（テキストの先頭20文字を使用）
+      const textPrefix = audio.text 
+        ? audio.text.substring(0, 20).replace(/[^\w\s]/gi, '').trim() 
+        : 'audio';
+      const fileName = `${textPrefix}_${new Date(audio.timestamp).toISOString().split('T')[0]}.wav`;
+
+      // ダウンロードリンクを作成
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+
+      // クリーンアップ
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+
+      showStatus('ダウンロードを開始しました', 'success');
+    } catch (error) {
+      handleError(error, 'ダウンロードに失敗しました');
+    }
+  });
+
   // 削除ボタン
   const deleteButton = createButton('delete-button', 'delete', '削除', async () => {
     if (confirm('この音声を削除してもよろしいですか？')) {
@@ -138,6 +179,7 @@ function createAudioItem(audio, query) {
   controls.appendChild(prevButton);
   controls.appendChild(playButton);
   controls.appendChild(nextButton);
+  controls.appendChild(downloadButton);
   controls.appendChild(deleteButton);
 
   item.appendChild(text);
@@ -238,28 +280,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     // まず現在のデータベース状態を確認
     const dbState = await db.checkDatabaseState();
     console.log('Initial database state:', JSON.stringify(dbState, null, 2));
-    
+
     // データベース接続を強制的に更新
     await refreshDatabaseConnection(true);
     console.log('Database connection refreshed forcefully');
-    
+
     // 更新後の状態を再確認
     const updatedDbState = await db.checkDatabaseState();
     console.log('Updated database state:', JSON.stringify(updatedDbState, null, 2));
-    
+
     console.log('Database initialized successfully');
 
     // 音声リストを取得（複数回試行する）
     let retryCount = 0;
     const maxRetries = 3;
     let fetchError = null;
-    
+
     while (retryCount < maxRetries) {
       try {
         console.log(`Fetching audio files (attempt ${retryCount + 1}/${maxRetries})...`);
         audioFiles = await db.getAudioList();
         console.log('Number of audio files in database:', audioFiles.length);
-        
+
         if (audioFiles.length > 0) {
           console.log('Audio files found:', audioFiles.length);
           console.log('First audio file:', JSON.stringify({
@@ -273,13 +315,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           console.log('No audio files found in database');
         }
-        
+
         break; // 成功したらループを抜ける
       } catch (error) {
         fetchError = error;
         console.error(`Error fetching audio files (attempt ${retryCount + 1}):`, error);
         retryCount++;
-        
+
         if (retryCount < maxRetries) {
           // 接続を再確立して再試行
           await refreshDatabaseConnection(true);
@@ -287,7 +329,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     }
-    
+
     if (fetchError && retryCount >= maxRetries) {
       console.error('Failed to fetch audio files after multiple attempts');
       handleError(fetchError, '音声データの取得に失敗しました');
@@ -344,7 +386,7 @@ async function loadAudioList(query = '') {
     // 音声リストを取得
     audioFiles = await db.getAudioList();
     console.log(`Retrieved ${audioFiles.length} audio files`);
-    
+
     if (audioFiles.length > 0) {
       console.log('Sample audio record:', {
         id: audioFiles[0].id,

@@ -217,6 +217,44 @@ async function playAudio(id) {
 }
 ```
 
+### データのダウンロード
+
+```javascript
+// 保存した音声をファイルとしてダウンロード
+async function downloadAudio(id) {
+  try {
+    // データを取得
+    const audioData = await storage.getItem(id);
+    
+    if (!audioData || !audioData.blob) {
+      throw new Error('Audio data not found');
+    }
+    
+    // ファイル名を生成
+    const fileName = `audio_${new Date(audioData.timestamp).toISOString().split('T')[0]}.wav`;
+    
+    // ダウンロードリンクを作成して自動クリック
+    const url = URL.createObjectURL(audioData.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    
+    // クリーンアップ
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    
+    return true;
+  } catch (error) {
+    console.error('Error downloading audio:', error);
+    return false;
+  }
+}
+```
+
 ### 一覧表示
 
 ```javascript
