@@ -99,28 +99,39 @@ class AudioDatabase {
   }
 
   async saveAudio(audioBlob, text) {
-    console.log('Saving audio data...');
+    console.log('Saving audio data...', new Date().toISOString());
 
     try {
       // 入力データの検証
-      if (!audioBlob || !(audioBlob instanceof Blob)) {
+      if (!audioBlob) {
+        console.error('無効な音声データ: audioBlob is null or undefined');
         throw new Error('無効な音声データです');
       }
+      
+      if (!(audioBlob instanceof Blob)) {
+        console.error('無効な音声データ: Not a Blob object, type is:', typeof audioBlob);
+        throw new Error('無効な音声データです (Blobではありません)');
+      }
+      
+      console.log('Blob検証OK:', audioBlob.size, 'bytes,', audioBlob.type);
       
       const textToSave = text && typeof text === 'string' 
         ? text.substring(0, 1000) 
         : '音声データ';
+      console.log('保存するテキスト長:', textToSave.length, '文字');
 
       // データベース接続を確保
       const db = await this.openDB();
+      console.log('データベース接続確保完了');
       
       // トランザクションを開始
       return await new Promise((resolve, reject) => {
         try {
+          console.log('トランザクション開始');
           const transaction = db.transaction(['audios'], 'readwrite');
           
           transaction.oncomplete = () => {
-            console.log('Save transaction completed successfully');
+            console.log('Save transaction completed successfully', new Date().toISOString());
           };
           
           transaction.onerror = (event) => {
@@ -129,22 +140,30 @@ class AudioDatabase {
           };
           
           const store = transaction.objectStore('audios');
+          console.log('オブジェクトストア取得完了:', store.name);
 
           // 保存するレコードを作成
+          const timestamp = new Date();
           const record = {
             blob: audioBlob,
             text: textToSave,
-            timestamp: new Date(),
+            timestamp: timestamp,
             fileSize: audioBlob.size,
             duration: null // 音声の長さがわかれば設定
           };
+          console.log('保存レコード作成完了:', 
+                     'テキスト長:', record.text.length,
+                     'タイムスタンプ:', timestamp.toISOString(),
+                     'サイズ:', record.fileSize);
 
           // レコードを追加
+          console.log('store.add実行開始');
           const request = store.add(record);
+          console.log('store.add実行完了、結果待ち');
 
           request.onsuccess = (event) => {
             const id = event.target.result;
-            console.log('Audio saved successfully with ID:', id);
+            console.log('Audio saved successfully with ID:', id, new Date().toISOString());
             resolve(id);
           };
 

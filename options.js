@@ -235,14 +235,63 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOM Content Loaded - Initializing options page');
 
   try {
+    // まず現在のデータベース状態を確認
     const dbState = await db.checkDatabaseState();
-    console.log('Database state:', JSON.stringify(dbState, null, 2));
-    await refreshDatabaseConnection();
+    console.log('Initial database state:', JSON.stringify(dbState, null, 2));
+    
+    // データベース接続を強制的に更新
+    await refreshDatabaseConnection(true);
+    console.log('Database connection refreshed forcefully');
+    
+    // 更新後の状態を再確認
+    const updatedDbState = await db.checkDatabaseState();
+    console.log('Updated database state:', JSON.stringify(updatedDbState, null, 2));
+    
     console.log('Database initialized successfully');
 
-    audioFiles = await db.getAudioList();
-    console.log('Number of audio files in database:', audioFiles.length);
-    console.log('Audio files:', JSON.stringify(audioFiles, null, 2));
+    // 音声リストを取得（複数回試行する）
+    let retryCount = 0;
+    const maxRetries = 3;
+    let fetchError = null;
+    
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`Fetching audio files (attempt ${retryCount + 1}/${maxRetries})...`);
+        audioFiles = await db.getAudioList();
+        console.log('Number of audio files in database:', audioFiles.length);
+        
+        if (audioFiles.length > 0) {
+          console.log('Audio files found:', audioFiles.length);
+          console.log('First audio file:', JSON.stringify({
+            id: audioFiles[0].id,
+            text: audioFiles[0].text?.substring(0, 50) + '...',
+            timestamp: audioFiles[0].timestamp,
+            hasBlob: !!audioFiles[0].blob,
+            blobSize: audioFiles[0].blob?.size || 0,
+            fileSize: audioFiles[0].fileSize
+          }, null, 2));
+        } else {
+          console.log('No audio files found in database');
+        }
+        
+        break; // 成功したらループを抜ける
+      } catch (error) {
+        fetchError = error;
+        console.error(`Error fetching audio files (attempt ${retryCount + 1}):`, error);
+        retryCount++;
+        
+        if (retryCount < maxRetries) {
+          // 接続を再確立して再試行
+          await refreshDatabaseConnection(true);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    }
+    
+    if (fetchError && retryCount >= maxRetries) {
+      console.error('Failed to fetch audio files after multiple attempts');
+      handleError(fetchError, '音声データの取得に失敗しました');
+    }
 
     // 保存されているAPIキーを読み込み
     const result = await chrome.storage.sync.get('falApiKey');

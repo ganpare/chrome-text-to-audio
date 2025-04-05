@@ -14,26 +14,26 @@ let isProcessing = false;
 async function refreshOptionsPage() {
   try {
     console.log('Attempting to refresh options page - timestamp:', Date.now());
-    
+
     // バックグラウンドスクリプトに処理を委譲
     const response = await chrome.runtime.sendMessage({ 
       action: 'refreshOptionsPage',
       timestamp: Date.now(),
       force: true
     });
-    
+
     console.log('Refresh message response:', response);
-    
+
     if (response && response.success) {
       console.log('Successfully refreshed pages with response:', response);
       return true;
     }
-    
+
     console.log('No active pages found, opening options page...');
-    
+
     // 最後の手段として通知を表示
     showSuccessNotification('音声が保存されました。設定画面で確認できます。');
-    
+
     // オプションページを開く
     try {
       const optionsUrl = chrome.runtime.getURL('options.html');
@@ -83,15 +83,15 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // 音声を再生（先に再生を行う）
       console.log('Preparing audio for playback...');
       let playbackComplete = false;
-      
+
       const playAudioPromise = new Promise((resolve, reject) => {
         try {
           const blobUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio();
-          
+
           // 再生のためのイベントリスナーを設定
           let playbackStarted = false;
-          
+
           // 再生準備完了イベント
           audio.oncanplaythrough = () => {
             console.log('Audio is ready to play');
@@ -133,7 +133,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
           // ソースを設定して読み込み開始
           audio.src = blobUrl;
           audio.load();
-          
+
           // 10秒以上再生が始まらなかった場合のタイムアウト処理
           setTimeout(() => {
             if (!playbackStarted) {
@@ -152,21 +152,27 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
       // 通知を表示
       showSuccessNotification('音声の再生を開始しました');
-      
+
       // 音声の再生が完了した後にデータベースへ保存する
       await playAudioPromise;
-      
+
       try {
-        console.log('音声再生完了、データベースに保存を開始します');
-        
+        console.log('音声再生完了、データベースに保存を開始します', new Date().toISOString());
+
         // データベース接続を確認と再確立
         if (!db) {
+          console.log('データベースインスタンスが存在しないため新規作成します');
           db = AudioDatabase.getInstance();
           await db.openDB(true); // 強制再接続
         } else {
+          console.log('既存のデータベースインスタンスを使用します');
           await db.openDB(); // 既存接続の確認
         }
-        
+
+        // データベース状態をチェック
+        const dbState = await db.checkDatabaseState();
+        console.log('データベース状態（保存前）:', JSON.stringify(dbState, null, 2));
+
         // Blobデータの検証
         if (!audioBlob) {
           throw new Error('音声データ（Blob）が見つかりません');
@@ -175,31 +181,39 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
         // クローンしたBlobを使用（元のBlobが変更された場合に備えて）
         const blobCopy = audioBlob.slice(0, audioBlob.size, audioBlob.type);
-        
+        console.log('Blobコピー作成完了：', blobCopy.size, 'bytes', blobCopy.type);
+
         // データベースに音声を保存（3回までリトライ）
         let audioId = null;
         let retryCount = 0;
         let saveError = null;
-        
+
         while (retryCount < 3 && audioId === null) {
           try {
-            console.log(`Saving audio data attempt ${retryCount + 1}/3`);
+            console.log(`Saving audio data attempt ${retryCount + 1}/3 - timestamp: ${new Date().toISOString()}`);
             audioId = await db.saveAudio(blobCopy, text);
-            console.log('音声を保存しました。ID:', audioId);
+            console.log('音声を保存しました。ID:', audioId, '- timestamp:', new Date().toISOString());
+
+            // 正常に保存されたら保存内容を確認
+            const savedAudio = await db.getAudio(audioId);
+            console.log('保存された音声データの検証:', 
+              savedAudio ? 
+              `ID: ${savedAudio.id}, サイズ: ${savedAudio.blob?.size || 'なし'} bytes, テキスト長: ${savedAudio.text?.length || 0}文字` : 
+              '取得に失敗');
             break;
           } catch (err) {
             saveError = err;
             console.error(`Save attempt ${retryCount + 1} failed:`, err);
-            
+
             // 次の試行の前に少し待機
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             // 接続を再確立してリトライ
             await db.openDB(true);
             retryCount++;
           }
         }
-        
+
         // すべての試行が失敗した場合
         if (audioId === null) {
           throw saveError || new Error('音声の保存に複数回失敗しました');
@@ -208,13 +222,13 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         showSuccessNotification('音声データを保存しました');
 
         // データベース状態を確認（デバッグ用）
-        const dbState = await db.checkDatabaseState();
-        console.log('Database state after save:', dbState);
+        const dbStateAfterSave = await db.checkDatabaseState();
+        console.log('Database state after save:', dbStateAfterSave);
 
         // オプションページの更新処理
         try {
           console.log('Sending refresh message to options page');
-          
+
           chrome.runtime.sendMessage({ 
             action: 'refreshOptionsPage',
             timestamp: Date.now(), // タイムスタンプを追加して毎回異なるメッセージにする
