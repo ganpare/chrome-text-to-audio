@@ -159,14 +159,12 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       try {
         console.log('音声再生完了、データベースに保存を開始します', new Date().toISOString());
 
-        // データベース接続を確認と再確立
+        // データベースインスタンスの確認
         if (!db) {
           console.log('データベースインスタンスが存在しないため新規作成します');
           db = AudioDatabase.getInstance();
-          await db.openDB(true); // 強制再接続
         } else {
           console.log('既存のデータベースインスタンスを使用します');
-          await db.openDB(); // 既存接続の確認
         }
 
         // データベース状態をチェック
@@ -179,44 +177,21 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         }
         console.log('音声データのサイズ:', audioBlob.size, 'bytes', 'type:', audioBlob.type);
 
-        // クローンしたBlobを使用（元のBlobが変更された場合に備えて）
-        const blobCopy = audioBlob.slice(0, audioBlob.size, audioBlob.type);
-        console.log('Blobコピー作成完了：', blobCopy.size, 'bytes', blobCopy.type);
+        // データを保存
+        try {
+          console.log(`音声データの保存を開始 - timestamp: ${new Date().toISOString()}`);
+          const audioId = await db.saveAudio(audioBlob, text);
+          console.log('音声を保存しました。ID:', audioId, '- timestamp:', new Date().toISOString());
 
-        // データベースに音声を保存（3回までリトライ）
-        let audioId = null;
-        let retryCount = 0;
-        let saveError = null;
-
-        while (retryCount < 3 && audioId === null) {
-          try {
-            console.log(`Saving audio data attempt ${retryCount + 1}/3 - timestamp: ${new Date().toISOString()}`);
-            audioId = await db.saveAudio(blobCopy, text);
-            console.log('音声を保存しました。ID:', audioId, '- timestamp:', new Date().toISOString());
-
-            // 正常に保存されたら保存内容を確認
-            const savedAudio = await db.getAudio(audioId);
-            console.log('保存された音声データの検証:', 
-              savedAudio ? 
-              `ID: ${savedAudio.id}, サイズ: ${savedAudio.blob?.size || 'なし'} bytes, テキスト長: ${savedAudio.text?.length || 0}文字` : 
-              '取得に失敗');
-            break;
-          } catch (err) {
-            saveError = err;
-            console.error(`Save attempt ${retryCount + 1} failed:`, err);
-
-            // 次の試行の前に少し待機
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // 接続を再確立してリトライ
-            await db.openDB(true);
-            retryCount++;
-          }
-        }
-
-        // すべての試行が失敗した場合
-        if (audioId === null) {
-          throw saveError || new Error('音声の保存に複数回失敗しました');
+          // 正常に保存されたら保存内容を確認
+          const savedAudio = await db.getAudio(audioId);
+          console.log('保存された音声データの検証:', 
+            savedAudio ? 
+            `ID: ${savedAudio.id}, サイズ: ${savedAudio.blob?.size || 'なし'} bytes, テキスト長: ${savedAudio.text?.length || 0}文字` : 
+            '取得に失敗');
+        } catch (saveError) {
+          console.error('音声保存中にエラーが発生しました:', saveError);
+          throw saveError;
         }
 
         showSuccessNotification('音声データを保存しました');

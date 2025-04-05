@@ -1,12 +1,8 @@
-
 class AudioDatabase {
   static instance = null;
 
   constructor() {
-    this.dbName = 'kokoroTts';
-    this.dbVersion = 2;
-    this.db = null;
-    this.isOpening = false;
+    this.storageKey = 'kokoroTtsAudios';
   }
 
   static getInstance() {
@@ -17,368 +13,171 @@ class AudioDatabase {
     return AudioDatabase.instance;
   }
 
-  async openDB(forceReopen = false) {
-    // 既に接続中で強制再オープンでなければ既存の接続を返す
-    if (this.db && !forceReopen) {
-      console.log('Using existing database connection');
-      return this.db;
-    }
-
-    // 既存の接続を閉じる
-    if (this.db && forceReopen) {
-      try {
-        this.db.close();
-        this.db = null;
-        console.log('Closed existing database connection');
-      } catch (err) {
-        console.warn('Error closing database:', err);
-      }
-    }
-
-    // 既に開いている処理がある場合は待機
-    if (this.isOpening) {
-      console.log('Database opening in progress, waiting...');
-      // 1秒ごとに確認して最大10秒待機
-      for (let i = 0; i < 10; i++) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        if (this.db) {
-          console.log('Database opened by another process');
-          return this.db;
-        }
-      }
-    }
-
-    this.isOpening = true;
-    console.log('Opening new database connection...');
-
-    try {
-      return await new Promise((resolve, reject) => {
-        const request = indexedDB.open(this.dbName, this.dbVersion);
-
-        request.onerror = (event) => {
-          console.error('Database open error:', event.target.error);
-          this.isOpening = false;
-          reject(event.target.error);
-        };
-
-        request.onupgradeneeded = (event) => {
-          console.log('Database upgrade needed, version:', event.oldVersion, '->', event.newVersion);
-          const db = event.target.result;
-          
-          if (!db.objectStoreNames.contains('audios')) {
-            console.log('Creating audios object store');
-            const store = db.createObjectStore('audios', { 
-              keyPath: 'id', 
-              autoIncrement: true 
-            });
-            store.createIndex('timestamp', 'timestamp', { unique: false });
-            store.createIndex('text', 'text', { unique: false });
-          }
-        };
-
-        request.onsuccess = (event) => {
-          const db = event.target.result;
-          this.db = db;
-          this.isOpening = false;
-          console.log('Database connection established successfully');
-
-          db.onversionchange = () => {
-            console.log('Database version changed by another connection');
-            db.close();
-            this.db = null;
-          };
-
-          resolve(db);
-        };
-      });
-    } catch (error) {
-      this.isOpening = false;
-      console.error('Error in openDB:', error);
-      throw error;
-    }
+  // 互換性のためだけの関数
+  async openDB() {
+    console.log('Chrome Storage API is already available');
+    return true;
   }
 
+  // 音声データを保存
   async saveAudio(audioBlob, text) {
     console.log('Saving audio data...', new Date().toISOString());
 
     try {
-      // 入力データの検証
-      if (!audioBlob) {
-        console.error('無効な音声データ: audioBlob is null or undefined');
-        throw new Error('無効な音声データです');
-      }
-      
-      if (!(audioBlob instanceof Blob)) {
-        console.error('無効な音声データ: Not a Blob object, type is:', typeof audioBlob);
-        throw new Error('無効な音声データです (Blobではありません)');
-      }
-      
-      console.log('Blob検証OK:', audioBlob.size, 'bytes,', audioBlob.type);
-      
-      const textToSave = text && typeof text === 'string' 
-        ? text.substring(0, 1000) 
-        : '音声データ';
-      console.log('保存するテキスト長:', textToSave.length, '文字');
+      // Blobをbase64に変換
+      const base64 = await this.blobToBase64(audioBlob);
 
-      // データベース接続を確保
-      const db = await this.openDB();
-      console.log('データベース接続確保完了');
-      
-      // トランザクションを開始
-      return await new Promise((resolve, reject) => {
-        try {
-          console.log('トランザクション開始');
-          const transaction = db.transaction(['audios'], 'readwrite');
-          
-          transaction.oncomplete = () => {
-            console.log('Save transaction completed successfully', new Date().toISOString());
-          };
-          
-          transaction.onerror = (event) => {
-            console.error('Save transaction error:', event.target.error);
-            reject(event.target.error);
-          };
-          
-          const store = transaction.objectStore('audios');
-          console.log('オブジェクトストア取得完了:', store.name);
+      // 既存のデータを取得
+      let audios = await this.getAudioList();
 
-          // 保存するレコードを作成
-          const timestamp = new Date();
-          const record = {
-            blob: audioBlob,
-            text: textToSave,
-            timestamp: timestamp,
-            fileSize: audioBlob.size,
-            duration: null // 音声の長さがわかれば設定
-          };
-          console.log('保存レコード作成完了:', 
-                     'テキスト長:', record.text.length,
-                     'タイムスタンプ:', timestamp.toISOString(),
-                     'サイズ:', record.fileSize);
+      // 新しい音声データを作成
+      const timestamp = new Date();
+      const newAudio = {
+        id: Date.now(), // タイムスタンプをIDとして使用
+        blobData: base64,
+        text: text && typeof text === 'string' ? text.substring(0, 1000) : '音声データ',
+        timestamp: timestamp.getTime(),
+        fileSize: audioBlob.size,
+        mimeType: audioBlob.type
+      };
 
-          // レコードを追加
-          console.log('store.add実行開始');
-          const request = store.add(record);
-          console.log('store.add実行完了、結果待ち');
+      // 配列に追加
+      audios.push(newAudio);
 
-          request.onsuccess = (event) => {
-            const id = event.target.result;
-            console.log('Audio saved successfully with ID:', id, new Date().toISOString());
-            resolve(id);
-          };
+      // 保存
+      await chrome.storage.local.set({ [this.storageKey]: audios });
+      console.log('Audio saved successfully with ID:', newAudio.id);
 
-          request.onerror = (event) => {
-            console.error('Error in save operation:', event.target.error);
-            reject(event.target.error);
-          };
-        } catch (transactionError) {
-          console.error('Error creating transaction:', transactionError);
-          reject(transactionError);
-        }
-      });
+      return newAudio.id;
     } catch (error) {
       console.error('Error in saveAudio:', error);
       throw error;
     }
   }
 
+  // Blobをbase64に変換
+  blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // base64をBlobに変換
+  base64ToBlob(base64, mimeType) {
+    try {
+      // Data URL形式からbase64部分を抽出
+      const parts = base64.split(',');
+      const byteString = atob(parts[1]);
+
+      // バイナリデータに変換
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i);
+      }
+
+      return new Blob([ab], { type: mimeType || 'audio/wav' });
+    } catch (error) {
+      console.error('Error converting base64 to blob:', error);
+      return null;
+    }
+  }
+
+  // 音声リストを取得
   async getAudioList() {
     console.log('Getting audio list...');
-    
+
     try {
-      // データベース接続を確保
-      const db = await this.openDB();
-      
-      // トランザクションを開始
-      return await new Promise((resolve, reject) => {
-        try {
-          const transaction = db.transaction(['audios'], 'readonly');
-          
-          transaction.oncomplete = () => {
-            console.log('GetAudioList transaction completed successfully');
-          };
-          
-          transaction.onerror = (event) => {
-            console.error('GetAudioList transaction error:', event.target.error);
-            reject(event.target.error);
-          };
-          
-          const store = transaction.objectStore('audios');
-          
-          // 全てのレコードを取得
-          const request = store.getAll();
-
-          request.onsuccess = (event) => {
-            const records = event.target.result || [];
-            console.log(`Retrieved ${records.length} audio records`);
-            
-            // 結果のチェック
-            if (records.length > 0) {
-              const sampleRecord = records[0];
-              const hasBlob = sampleRecord.blob instanceof Blob;
-              console.log(`Sample record: ID=${sampleRecord.id}, has blob=${hasBlob}, size=${hasBlob ? sampleRecord.blob.size : 'N/A'}`);
-            }
-            
-            resolve(records);
-          };
-
-          request.onerror = (event) => {
-            console.error('Error getting audio list:', event.target.error);
-            reject(event.target.error);
-          };
-        } catch (transactionError) {
-          console.error('Error creating transaction for getAudioList:', transactionError);
-          reject(transactionError);
-        }
-      });
+      const result = await chrome.storage.local.get(this.storageKey);
+      const audios = result[this.storageKey] || [];
+      console.log(`Retrieved ${audios.length} audio records`);
+      return audios;
     } catch (error) {
       console.error('Error in getAudioList:', error);
       return [];
     }
   }
 
+  // 特定の音声データを取得
   async getAudio(id) {
     console.log('Getting audio with ID:', id);
-    
+
     if (!id) {
       throw new Error('無効なIDです');
     }
-    
+
     try {
-      // データベース接続を確保
-      const db = await this.openDB();
-      
-      // IDが数値の場合は変換
-      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
-      
-      // トランザクションを開始
-      return await new Promise((resolve, reject) => {
-        try {
-          const transaction = db.transaction(['audios'], 'readonly');
-          const store = transaction.objectStore('audios');
-          const request = store.get(numericId);
+      // 全てのデータを取得
+      const audios = await this.getAudioList();
 
-          request.onsuccess = () => {
-            const result = request.result;
-            if (result) {
-              console.log(`Found audio ID ${numericId}, has blob: ${result.blob instanceof Blob}`);
-              resolve(result);
-            } else {
-              console.warn(`Audio ID ${numericId} not found`);
-              resolve(null);
-            }
-          };
+      // 指定されたIDのデータを検索
+      const audio = audios.find(a => a.id === id);
 
-          request.onerror = (event) => {
-            console.error('Error getting audio:', event.target.error);
-            reject(event.target.error);
-          };
-        } catch (transactionError) {
-          console.error('Error creating transaction for getAudio:', transactionError);
-          reject(transactionError);
-        }
-      });
+      if (!audio) {
+        console.warn(`Audio ID ${id} not found`);
+        return null;
+      }
+
+      // base64データをBlobに変換して返す
+      if (audio.blobData) {
+        audio.blob = this.base64ToBlob(audio.blobData, audio.mimeType);
+        console.log(`Found audio ID ${id}, created blob: ${audio.blob.size} bytes`);
+      }
+
+      return audio;
     } catch (error) {
       console.error('Error in getAudio:', error);
       throw error;
     }
   }
 
+  // 音声データを削除
   async deleteAudio(id) {
     console.log('Deleting audio with ID:', id);
-    
+
     if (!id) {
       throw new Error('無効なIDです');
     }
-    
+
     try {
-      // データベース接続を確保
-      const db = await this.openDB();
-      
-      // IDが数値の場合は変換
-      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
-      
-      // トランザクションを開始
-      return await new Promise((resolve, reject) => {
-        try {
-          const transaction = db.transaction(['audios'], 'readwrite');
-          
-          transaction.oncomplete = () => {
-            console.log('Delete transaction completed successfully');
-          };
-          
-          transaction.onerror = (event) => {
-            console.error('Delete transaction error:', event.target.error);
-            reject(event.target.error);
-          };
-          
-          const store = transaction.objectStore('audios');
-          const request = store.delete(numericId);
+      // 全てのデータを取得
+      let audios = await this.getAudioList();
 
-          request.onsuccess = () => {
-            console.log(`Audio ID ${numericId} deleted successfully`);
-            resolve();
-          };
+      // 指定されたIDのデータを除外
+      const newAudios = audios.filter(a => a.id !== id);
 
-          request.onerror = (event) => {
-            console.error('Error deleting audio:', event.target.error);
-            reject(event.target.error);
-          };
-        } catch (transactionError) {
-          console.error('Error creating transaction for deleteAudio:', transactionError);
-          reject(transactionError);
-        }
-      });
+      // 保存
+      await chrome.storage.local.set({ [this.storageKey]: newAudios });
+      console.log(`Audio ID ${id} deleted successfully`);
+
+      return true;
     } catch (error) {
       console.error('Error in deleteAudio:', error);
       throw error;
     }
   }
 
+  // データベース状態の確認（互換性のため）
   async checkDatabaseState() {
     try {
-      // データベース接続を確保
-      const db = await this.openDB();
-      
-      return new Promise((resolve, reject) => {
-        try {
-          const transaction = db.transaction(['audios'], 'readonly');
-          const store = transaction.objectStore('audios');
-          const countRequest = store.count();
+      const audios = await this.getAudioList();
 
-          countRequest.onsuccess = () => {
-            resolve({
-              isOpen: true,
-              objectStoreExists: true,
-              recordCount: countRequest.result,
-              dbName: this.dbName,
-              dbVersion: this.dbVersion
-            });
-          };
-
-          countRequest.onerror = (event) => {
-            console.error('Error in count request:', event.target.error);
-            reject(event.target.error);
-          };
-        } catch (error) {
-          console.error('Error checking store:', error);
-          resolve({
-            isOpen: true,
-            objectStoreExists: false,
-            error: error.message,
-            dbName: this.dbName,
-            dbVersion: this.dbVersion
-          });
-        }
-      });
+      return {
+        isOpen: true,
+        objectStoreExists: true,
+        recordCount: audios.length,
+        dbName: 'chromeStorage',
+        dbVersion: 1
+      };
     } catch (error) {
       console.error('Error checking database state:', error);
       return {
         isOpen: false,
         objectStoreExists: false,
         recordCount: 0,
-        dbName: this.dbName,
-        dbVersion: this.dbVersion,
         error: error.message
       };
     }

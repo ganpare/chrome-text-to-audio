@@ -337,14 +337,22 @@ async function loadAudioList(query = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
-    // データベース接続を確認
+    // データベースから音声リストを取得
     const db = AudioDatabase.getInstance();
-    await db.openDB();
-    console.log('Fetching audio list from database...');
+    console.log('Fetching audio list from storage...');
 
     // 音声リストを取得
     audioFiles = await db.getAudioList();
     console.log(`Retrieved ${audioFiles.length} audio files`);
+    
+    if (audioFiles.length > 0) {
+      console.log('Sample audio record:', {
+        id: audioFiles[0].id,
+        text: audioFiles[0].text.substring(0, 30) + '...',
+        hasBlob: !!audioFiles[0].blobData,
+        size: audioFiles[0].fileSize
+      });
+    }
 
     // 検索フィルター適用
     const filteredFiles = query
@@ -360,10 +368,14 @@ async function loadAudioList(query = '') {
     }
 
     // 日付でソート（新しい順）
-    filteredFiles.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    filteredFiles.sort((a, b) => b.timestamp - a.timestamp);
 
     console.log('Rendering audio items...');
     for (const audio of filteredFiles) {
+      // 表示用にblobを作成（必要な場合のみ）
+      if (audio.blobData && !audio.blob) {
+        audio.blob = db.base64ToBlob(audio.blobData, audio.mimeType);
+      }
       audioList.appendChild(createAudioItem(audio, query));
     }
 
