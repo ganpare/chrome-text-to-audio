@@ -436,10 +436,6 @@ async function loadAudioList(query = '') {
   }
 
 // 音声を再生
-async function playAudio(blob) {
-  if (currentAudio) {
-    currentAudio.pause();
-
 // 強制更新ボタンの共通処理
 function setupForceRefreshButton() {
   const forceRefreshButton = document.getElementById('forceRefreshButton');
@@ -468,6 +464,9 @@ function setupForceRefreshButton() {
   });
 }
 
+async function playAudio(blob) {
+  if (currentAudio) {
+    currentAudio.pause();
     URL.revokeObjectURL(currentAudio.src);
     currentAudio = null;
   }
