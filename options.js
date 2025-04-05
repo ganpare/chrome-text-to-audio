@@ -283,30 +283,7 @@ async function loadAudioList(query = '') {
         `;
 
         // 強制更新ボタンのイベントリスナーを追加
-        const forceRefreshButton = document.getElementById('forceRefreshButton');
-        if (forceRefreshButton) {
-          forceRefreshButton.addEventListener('click', async () => {
-            try {
-              forceRefreshButton.disabled = true;
-              forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
-
-              // データベース接続を完全に更新
-              db = AudioDatabase.getInstance();
-              await db.openDB(true); // 強制的に再オープン
-              await loadAudioList();
-
-              showStatus('音声一覧を強制更新しました', 'success');
-            } catch (error) {
-              console.error('Failed to refresh audio list:', error);
-              showStatus('更新に失敗しました: ' + error.message, 'error');
-            } finally {
-              if (forceRefreshButton) {
-                forceRefreshButton.disabled = false;
-                forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>強制更新';
-              }
-            }
-          });
-        }
+        setupForceRefreshButton();
 
         return;
       }
@@ -452,30 +429,7 @@ async function loadAudioList(query = '') {
       `;
 
       // 強制更新ボタンのイベントリスナーを追加
-      const forceRefreshButton = document.getElementById('forceRefreshButton');
-      if (forceRefreshButton) {
-        forceRefreshButton.addEventListener('click', async () => {
-          try {
-            forceRefreshButton.disabled = true;
-            forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
-
-            // データベース接続を完全に更新
-            db = AudioDatabase.getInstance();
-            await db.openDB(true); // 強制的に再オープン
-            await loadAudioList();
-
-            showStatus('音声一覧を強制更新しました', 'success');
-          } catch (error) {
-            console.error('Failed to refresh audio list:', error);
-            showStatus('更新に失敗しました: ' + error.message, 'error');
-          } finally {
-            if (forceRefreshButton) {
-              forceRefreshButton.disabled = false;
-              forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>強制更新';
-            }
-          }
-        });
-      }
+      setupForceRefreshButton();
     } finally {
       loading.classList.remove('active');
     }
@@ -485,6 +439,35 @@ async function loadAudioList(query = '') {
 async function playAudio(blob) {
   if (currentAudio) {
     currentAudio.pause();
+
+// 強制更新ボタンの共通処理
+function setupForceRefreshButton() {
+  const forceRefreshButton = document.getElementById('forceRefreshButton');
+  if (!forceRefreshButton) return;
+  
+  forceRefreshButton.addEventListener('click', async () => {
+    try {
+      forceRefreshButton.disabled = true;
+      forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>更新中...';
+
+      // データベース接続を完全に更新
+      db = AudioDatabase.getInstance();
+      await db.openDB(true); // 強制的に再オープン
+      await loadAudioList();
+
+      showStatus('音声一覧を強制更新しました', 'success');
+    } catch (error) {
+      console.error('Failed to refresh audio list:', error);
+      showStatus('更新に失敗しました: ' + error.message, 'error');
+    } finally {
+      if (forceRefreshButton) {
+        forceRefreshButton.disabled = false;
+        forceRefreshButton.innerHTML = '<i class="material-icons">refresh</i>強制更新';
+      }
+    }
+  });
+}
+
     URL.revokeObjectURL(currentAudio.src);
     currentAudio = null;
   }
