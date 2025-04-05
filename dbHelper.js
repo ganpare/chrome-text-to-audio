@@ -1,6 +1,6 @@
+
 class AudioDatabase {
   static instance = null;
-  static db = null;
 
   constructor() {
     this.dbName = 'kokoroTts';
@@ -19,17 +19,18 @@ class AudioDatabase {
   }
 
   async getConnection() {
+    // 既存の接続プロミスがあれば、それを返す
     if (this.connectionPromise) {
       return this.connectionPromise;
     }
 
+    // 新しい接続を作成
     this.connectionPromise = new Promise((resolve, reject) => {
       console.log('Opening new database connection...');
       const request = indexedDB.open(this.dbName, this.dbVersion);
 
       request.onerror = (event) => {
         console.error('Database error:', event.target.error);
-        this.isInitialized = false;
         this.connectionPromise = null;
         reject(event.target.error);
       };
@@ -53,14 +54,12 @@ class AudioDatabase {
         const db = event.target.result;
         this.db = db;
         this.isInitialized = true;
-        console.log('Database connection established');
+        console.log('Database connection established successfully');
 
         db.onversionchange = () => {
-          if (db) {
-            db.close();
-            this.isInitialized = false;
-            this.connectionPromise = null;
-          }
+          db.close();
+          this.isInitialized = false;
+          this.connectionPromise = null;
         };
 
         resolve(db);
@@ -79,7 +78,6 @@ class AudioDatabase {
       this.isInitialized = false;
       this.connectionPromise = null;
     }
-
     return this.getConnection();
   }
 
@@ -99,6 +97,12 @@ class AudioDatabase {
       
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(['audios'], 'readwrite');
+        
+        transaction.onerror = (event) => {
+          console.error('Transaction error:', event.target.error);
+          reject(event.target.error);
+        };
+        
         const store = transaction.objectStore('audios');
 
         const record = {
@@ -116,11 +120,7 @@ class AudioDatabase {
           resolve(id);
         };
 
-        transaction.oncomplete = () => {
-          console.log('Save transaction completed');
-        };
-
-        request.onerror = transaction.onerror = (event) => {
+        request.onerror = (event) => {
           console.error('Error in save operation:', event.target.error);
           reject(event.target.error);
         };
@@ -139,16 +139,22 @@ class AudioDatabase {
       
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(['audios'], 'readonly');
+        
+        transaction.onerror = (event) => {
+          console.error('Transaction error:', event.target.error);
+          reject(event.target.error);
+        };
+        
         const store = transaction.objectStore('audios');
         const request = store.getAll();
 
-        request.onsuccess = () => {
-          const records = request.result || [];
+        request.onsuccess = (event) => {
+          const records = event.target.result || [];
           console.log(`Retrieved ${records.length} audio records`);
           resolve(records);
         };
 
-        request.onerror = transaction.onerror = (event) => {
+        request.onerror = (event) => {
           console.error('Error getting audio list:', event.target.error);
           reject(event.target.error);
         };
@@ -170,7 +176,7 @@ class AudioDatabase {
         const store = transaction.objectStore('audios');
         const request = store.get(id);
 
-        request.onsuccess = () => {
+        request.onsuccess = (event) => {
           resolve(request.result);
         };
 
@@ -227,9 +233,7 @@ class AudioDatabase {
             objectStoreExists: true,
             recordCount: countRequest.result,
             dbName: this.dbName,
-            dbVersion: this.dbVersion,
-            storeNames: Array.from(db.objectStoreNames),
-            indexes: Array.from(store.indexNames)
+            dbVersion: this.dbVersion
           });
         };
 

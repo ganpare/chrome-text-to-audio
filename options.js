@@ -288,49 +288,16 @@ async function loadAudioList(query = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
-    await refreshDatabaseConnection(true);
+    // データベース接続を確認
+    const db = AudioDatabase.getInstance();
+    await db.openDB();
     console.log('Fetching audio list from database...');
 
-    // 複数回試行するための準備
-    let retryCount = 0;
-    const maxRetries = 3;
+    // 音声リストを取得
+    audioFiles = await db.getAudioList();
+    console.log(`Retrieved ${audioFiles.length} audio files`);
 
-    while (retryCount < maxRetries && (!audioFiles || audioFiles.length === 0)) {
-      console.log(`Getting audio list (attempt ${retryCount + 1}/${maxRetries})...`);
-      audioFiles = await db.getAudioList();
-      console.log(`Attempt ${retryCount + 1}: Retrieved audio files:`, audioFiles.length, 'items');
-
-      if (audioFiles.length > 0) break;
-      retryCount++;
-      if (retryCount < maxRetries) {
-        console.log(`No audio files found, waiting before next attempt...`);
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    }
-
-    // Blobデータの確認と取得
-    if (audioFiles.length > 0) {
-      const itemsWithBlob = audioFiles.filter(item => !!item.blob).length;
-      console.log(`Items with blob data: ${itemsWithBlob}/${audioFiles.length}`);
-
-      if (itemsWithBlob < audioFiles.length) {
-        console.log('Some items missing blob data, attempting to retrieve them');
-        for (let i = 0; i < audioFiles.length; i++) {
-          if (!audioFiles[i].blob) {
-            try {
-              const fullData = await db.getAudio(audioFiles[i].id);
-              if (fullData && fullData.blob) {
-                audioFiles[i].blob = fullData.blob;
-                console.log(`Retrieved missing blob for item ID ${audioFiles[i].id}`);
-              }
-            } catch (e) {
-              console.warn(`Failed to retrieve blob for item ID ${audioFiles[i].id}:`, e);
-            }
-          }
-        }
-      }
-    }
-
+    // 検索フィルター適用
     const filteredFiles = query
       ? audioFiles.filter(audio => audio.text && audio.text.toLowerCase().includes(query.toLowerCase()))
       : audioFiles;
@@ -348,7 +315,6 @@ async function loadAudioList(query = '') {
 
     console.log('Rendering audio items...');
     for (const audio of filteredFiles) {
-      console.log('Creating element for audio ID:', audio.id);
       audioList.appendChild(createAudioItem(audio, query));
     }
 
