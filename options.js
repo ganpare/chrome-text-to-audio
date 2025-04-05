@@ -178,8 +178,8 @@ function showStatus(message, type) {
 }
 
 // 音声一覧を読み込んで表示
-async function loadAudioList(searchQuery = '') {
-    console.log('loadAudioList called with query:', searchQuery);
+async function loadAudioList(query = '') {
+    console.log('loadAudioList called with query:', query);
     const audioList = document.getElementById('audioList');
     const loading = document.querySelector('.loading');
 
@@ -262,9 +262,9 @@ async function loadAudioList(searchQuery = '') {
         }
       }
 
-      const filteredFiles = searchQuery
+      const filteredFiles = query
         ? audioFiles.filter(audio => 
-            audio.text && audio.text.toLowerCase().includes(searchQuery.toLowerCase()))
+            audio.text && audio.text.toLowerCase().includes(query.toLowerCase()))
         : audioFiles;
 
       console.log('Filtered audio files:', filteredFiles.length, 'items');
@@ -274,7 +274,7 @@ async function loadAudioList(searchQuery = '') {
         audioList.innerHTML = `
           <div class="empty-state">
             <i class="material-icons">music_off</i>
-            <p>${searchQuery ? '検索結果が見つかりません' : '保存された音声はありません'}</p>
+            <p>${query ? '検索結果が見つかりません' : '保存された音声はありません'}</p>
             <button id="forceRefreshButton" class="refresh-button" style="margin-top: 15px;">
               <i class="material-icons">refresh</i>強制更新
             </button>
@@ -417,7 +417,7 @@ async function loadAudioList(searchQuery = '') {
           if (confirm('この音声を削除してもよろしいですか？')) {
             try {
               await db.deleteAudio(audio.id);
-              await loadAudioList(searchQuery);
+              await loadAudioList(query);
               showStatus('音声を削除しました', 'success');
             } catch (error) {
               console.error('Failed to delete audio:', error);
