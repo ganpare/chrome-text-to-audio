@@ -10,10 +10,10 @@ try {
 }
 let isProcessing = false;
 
-// オプションページや履歴ページを更新する関数
+// オプションページを更新する関数
 async function refreshOptionsPage() {
   try {
-    console.log('Attempting to refresh pages - timestamp:', Date.now());
+    console.log('Attempting to refresh options page - timestamp:', Date.now());
     
     // バックグラウンドスクリプトに処理を委譲
     const response = await chrome.runtime.sendMessage({ 
@@ -29,24 +29,24 @@ async function refreshOptionsPage() {
       return true;
     }
     
-    console.log('No active pages found that can be refreshed, trying to open history...');
+    console.log('No active pages found, opening options page...');
     
     // 最後の手段として通知を表示
-    showSuccessNotification('音声が保存されました。履歴ページで確認できます。');
+    showSuccessNotification('音声が保存されました。設定画面で確認できます。');
     
-    // 履歴ページを強制的に開く
+    // オプションページを開く
     try {
-      const historyUrl = chrome.runtime.getURL('history.html');
-      await chrome.tabs.create({ url: historyUrl });
-      console.log('History page opened successfully');
+      const optionsUrl = chrome.runtime.getURL('options.html');
+      await chrome.runtime.openOptionsPage();
+      console.log('Options page opened successfully');
       return true;
     } catch (tabError) {
-      console.error('Failed to open history tab:', tabError);
+      console.error('Failed to open options page:', tabError);
       return false;
     }
   } catch (error) {
     console.error('Failed to refresh pages:', error);
-    showSuccessNotification('音声が保存されました。履歴ページで確認できます。');
+    showSuccessNotification('音声が保存されました。設定画面で確認できます。');
     return false;
   }
 }
@@ -212,8 +212,6 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
         // オプションページの更新処理
         try {
-          // 開いているオプションページを探してメッセージを送信
-          const optionsUrl = chrome.runtime.getURL('options.html');
           console.log('Sending refresh message to options page');
           
           chrome.runtime.sendMessage({ 
@@ -244,7 +242,6 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     showError(message.error);
   }
 });
-
 
 // エラーメッセージを表示
 function showError(message) {
