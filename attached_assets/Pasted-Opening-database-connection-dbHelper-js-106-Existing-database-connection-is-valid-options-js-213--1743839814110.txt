@@ -1,0 +1,68 @@
+Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+options.js:213 Getting audio list (attempt 2/3)...
+dbHelper.js:324 getAudioList called
+dbHelper.js:73 Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+dbHelper.js:287 Database state: Object
+dbHelper.js:328 Database state before getAudioList: Object
+dbHelper.js:73 Opening database connection...
+dbHelper.js:78 Force reopening database connection
+dbHelper.js:91 Waiting for database initialization...
+dbHelper.js:121 Creating new database connection (attempt 1/3)
+dbHelper.js:287 Database state: Object
+dbHelper.js:328 Database state before getAudioList: Object
+dbHelper.js:73 Opening database connection...
+dbHelper.js:91 Waiting for database initialization...
+dbHelper.js:121 Creating new database connection (attempt 1/3)
+dbHelper.js:160 Database connection established successfully
+dbHelper.js:339 Starting transaction for getAudioList (attempt 1/3)
+dbHelper.js:160 Database connection established successfully
+dbHelper.js:339 Starting transaction for getAudioList (attempt 1/3)
+dbHelper.js:369 Raw database results (attempt 1): 0 items found
+dbHelper.js:381 Processed audio files (attempt 1): 0 items
+dbHelper.js:385 Number of audio files with blob data: 0/0
+options.js:215 Attempt 3: Retrieved audio files: 0 items
+options.js:270 Filtered audio files: 0 items
+options.js:273 No audio files found after filtering
+options.js:419 Error in loadAudioList: ReferenceError: setupForceRefreshButton is not defined
+    at loadAudioList (options.js:286:9)
+    at async options.js:26:9
+loadAudioList @ options.js:419Understand this errorAI
+options.js:30 Error in delayed refresh: ReferenceError: setupForceRefreshButton is not defined
+    at loadAudioList (options.js:432:7)
+    at async options.js:26:9
+(anonymous) @ options.js:30Understand this errorAI
+dbHelper.js:369 Raw database results (attempt 1): 0 items found
+dbHelper.js:381 Processed audio files (attempt 1): 0 items
+dbHelper.js:385 Number of audio files with blob data: 0/0
+options.js:215 Attempt 2: Retrieved audio files: 0 items
+options.js:223 No audio files found, waiting before next attempt...
+2dbHelper.js:357 Transaction completed successfully
+options.js:213 Getting audio list (attempt 3/3)...
+dbHelper.js:324 getAudioList called
+dbHelper.js:73 Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+dbHelper.js:287 Database state: Object
+dbHelper.js:328 Database state before getAudioList: Object
+dbHelper.js:73 Opening database connection...
+dbHelper.js:78 Force reopening database connection
+dbHelper.js:91 Waiting for database initialization...
+dbHelper.js:121 Creating new database connection (attempt 1/3)
+dbHelper.js:160 Database connection established successfully
+dbHelper.js:339 Starting transaction for getAudioList (attempt 1/3)
+dbHelper.js:369 Raw database results (attempt 1): 0 items found
+dbHelper.js:381 Processed audio files (attempt 1): 0 items
+dbHelper.js:385 Number of audio files with blob data: 0/0
+options.js:215 Attempt 3: Retrieved audio files: 0 items
+options.js:270 Filtered audio files: 0 items
+options.js:273 No audio files found after filtering
+options.js:419 Error in loadAudioList: ReferenceError: setupForceRefreshButton is not defined
+    at loadAudioList (options.js:286:9)
+    at async options.js:26:9
+loadAudioList @ options.js:419Understand this errorAI
+options.js:30 Error in delayed refresh: ReferenceError: setupForceRefreshButton is not defined
+    at loadAudioList (options.js:432:7)
+    at async options.js:26:9
+(anonymous) @ options.js:30Understand this errorAI
+dbHelper.js:357 Transaction completed successfully
