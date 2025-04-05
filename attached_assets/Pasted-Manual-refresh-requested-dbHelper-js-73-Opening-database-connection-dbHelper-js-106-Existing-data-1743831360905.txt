@@ -1,0 +1,35 @@
+Manual refresh requested
+dbHelper.js:73 Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+options.js:182 loadAudioList called with query: 
+dbHelper.js:73 Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+dbHelper.js:287 Database state: {isOpen: true, objectStoreExists: true, recordCount: 0, dbName: 'kokoroTts', dbVersion: 1}dbName: "kokoroTts"dbVersion: 1isOpen: trueobjectStoreExists: truerecordCount: 0[[Prototype]]: Object
+options.js:194 Current database state: {isOpen: true, objectStoreExists: true, recordCount: 0, dbName: 'kokoroTts', dbVersion: 1}
+options.js:442 Error in loadAudioList: TypeError: Assignment to constant variable.
+    at loadAudioList (options.js:204:10)
+    at async HTMLButtonElement.<anonymous> (options.js:105:9)
+loadAudioList @ options.js:442
+await in loadAudioList
+(anonymous) @ options.js:105Understand this errorAI
+options.js:154 Refreshing audio list...
+options.js:182 loadAudioList called with query: 
+dbHelper.js:73 Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+dbHelper.js:287 Database state: {isOpen: true, objectStoreExists: true, recordCount: 0, dbName: 'kokoroTts', dbVersion: 1}
+options.js:194 Current database state: {isOpen: true, objectStoreExists: true, recordCount: 0, dbName: 'kokoroTts', dbVersion: 1}
+options.js:442 Error in loadAudioList: TypeError: Assignment to constant variable.
+    at loadAudioList (options.js:204:10)
+    at async options.js:155:7
+loadAudioList @ options.js:442
+await in loadAudioList
+(anonymous) @ options.js:155Understand this errorAI
+options.js:154 Refreshing audio list...
+options.js:182 loadAudioList called with query: 
+dbHelper.js:73 Opening database connection...
+dbHelper.js:106 Existing database connection is valid
+dbHelper.js:287 Database state: {isOpen: true, objectStoreExists: true, recordCount: 0, dbName: 'kokoroTts', dbVersion: 1}
+options.js:194 Current database state: {isOpen: true, objectStoreExists: true, recordCount: 0, dbName: 'kokoroTts', dbVersion: 1}
+options.js:442 Error in loadAudioList: TypeError: Assignment to constant variable.
+    at loadAudioList (options.js:204:10)
+    at async options.js:155:7
