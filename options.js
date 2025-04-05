@@ -1,4 +1,4 @@
-const db = AudioDatabase.getInstance();
+let db = AudioDatabase.getInstance();
 let currentAudio = null;
 let currentAudioId = null;
 let audioFiles = [];
