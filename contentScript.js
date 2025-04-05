@@ -158,11 +158,59 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       
       try {
         console.log('音声再生完了、データベースに保存を開始します');
+        
+        // データベース接続を確認
+        if (!db) {
+          console.log('データベースインスタンスの再取得を試みます');
+          db = AudioDatabase.getInstance();
+          await db.openDB(true);
+        }
+
+        // Blobデータの検証
+        if (!audioBlob) {
+          throw new Error('音声データ（Blob）が見つかりません');
+        }
+        console.log('音声データのサイズ:', audioBlob.size, 'bytes');
+
+        // データベースの状態を確認
+        const dbState = await db.checkDatabaseState();
+        console.log('データベースの状態:', dbState);
+
+        if (!dbState.isOpen || !dbState.objectStoreExists) {
+          throw new Error('データベースが正しく初期化されていません');
+        }
+
+        // データベースに保存するデータの詳細をログ出力
+        console.log('データベースに保存するデータ:', {
+          textLength: text.length,
+          blobSize: audioBlob.size,
+          timestamp: new Date().toISOString()
+        });
+
         // データベースに音声を保存
         const audioId = await db.saveAudio(audioBlob, text);
-        console.log('Audio saved successfully with ID:', audioId);
+        console.log('音声を保存しました。ID:', audioId);
 
-        // オプションページを更新
+        if (!audioId) {
+          throw new Error('音声の保存に失敗しました（IDが返されませんでした）');
+        }
+
+        // 保存確認のためデータを読み込み
+        const savedAudio = await db.getAudio(audioId);
+        if (!savedAudio || !savedAudio.blob) {
+          throw new Error('保存した音声データの確認に失敗しました');
+        }
+
+        console.log('保存した音声データを確認しました:', {
+          id: savedAudio.id,
+          textLength: savedAudio.text.length,
+          blobSize: savedAudio.blob.size,
+          timestamp: savedAudio.timestamp
+        });
+
+        showSuccessNotification('音声データを保存しました');
+
+        // オプションページの更新処理
         try {
           // 開いているオプションページを探してメッセージを送信
           const optionsUrl = chrome.runtime.getURL('options.html');
@@ -182,16 +230,11 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
           console.log('Failed to send refresh message:', msgError);
           // エラーを無視して処理を続行
         }
-      } catch (dbError) {
-        console.error('Failed to save audio to database:', dbError);
-        // エラー通知を表示
-        showError(`データベースへの保存に失敗しました: ${dbError.message}`);
+      } catch (error) {
+        console.error('Error in audio save process:', error);
+        showError(`音声の保存に失敗しました: ${error.message}`);
+        throw error;
       }
-
-      // 音声再生は上の処理に統合しました
-
-      // 通知を表示
-      showSuccessNotification('音声の再生を開始しました');
 
     } catch (error) {
       console.error('Error in playAudio:', error);
