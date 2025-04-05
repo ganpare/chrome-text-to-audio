@@ -6,8 +6,7 @@ class AudioDatabase {
     this.dbName = 'kokoroTts';
     this.dbVersion = 2;
     this.db = null;
-    this.isInitialized = false;
-    this.connectionPromise = null;
+    this.isOpening = false;
   }
 
   static getInstance() {
@@ -18,112 +17,145 @@ class AudioDatabase {
     return AudioDatabase.instance;
   }
 
-  async getConnection() {
-    // 既存の接続プロミスがあれば、それを返す
-    if (this.connectionPromise) {
-      return this.connectionPromise;
+  async openDB(forceReopen = false) {
+    // 既に接続中で強制再オープンでなければ既存の接続を返す
+    if (this.db && !forceReopen) {
+      console.log('Using existing database connection');
+      return this.db;
     }
 
-    // 新しい接続を作成
-    this.connectionPromise = new Promise((resolve, reject) => {
-      console.log('Opening new database connection...');
-      const request = indexedDB.open(this.dbName, this.dbVersion);
+    // 既存の接続を閉じる
+    if (this.db && forceReopen) {
+      try {
+        this.db.close();
+        this.db = null;
+        console.log('Closed existing database connection');
+      } catch (err) {
+        console.warn('Error closing database:', err);
+      }
+    }
 
-      request.onerror = (event) => {
-        console.error('Database error:', event.target.error);
-        this.connectionPromise = null;
-        reject(event.target.error);
-      };
-
-      request.onupgradeneeded = (event) => {
-        console.log('Database upgrade needed');
-        const db = event.target.result;
-        
-        if (!db.objectStoreNames.contains('audios')) {
-          console.log('Creating audios object store');
-          const store = db.createObjectStore('audios', { 
-            keyPath: 'id', 
-            autoIncrement: true 
-          });
-          store.createIndex('timestamp', 'timestamp', { unique: false });
-          store.createIndex('text', 'text', { unique: false });
+    // 既に開いている処理がある場合は待機
+    if (this.isOpening) {
+      console.log('Database opening in progress, waiting...');
+      // 1秒ごとに確認して最大10秒待機
+      for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (this.db) {
+          console.log('Database opened by another process');
+          return this.db;
         }
-      };
+      }
+    }
 
-      request.onsuccess = (event) => {
-        const db = event.target.result;
-        this.db = db;
-        this.isInitialized = true;
-        console.log('Database connection established successfully');
+    this.isOpening = true;
+    console.log('Opening new database connection...');
 
-        db.onversionchange = () => {
-          db.close();
-          this.isInitialized = false;
-          this.connectionPromise = null;
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = indexedDB.open(this.dbName, this.dbVersion);
+
+        request.onerror = (event) => {
+          console.error('Database open error:', event.target.error);
+          this.isOpening = false;
+          reject(event.target.error);
         };
 
-        resolve(db);
-      };
-    });
+        request.onupgradeneeded = (event) => {
+          console.log('Database upgrade needed, version:', event.oldVersion, '->', event.newVersion);
+          const db = event.target.result;
+          
+          if (!db.objectStoreNames.contains('audios')) {
+            console.log('Creating audios object store');
+            const store = db.createObjectStore('audios', { 
+              keyPath: 'id', 
+              autoIncrement: true 
+            });
+            store.createIndex('timestamp', 'timestamp', { unique: false });
+            store.createIndex('text', 'text', { unique: false });
+          }
+        };
 
-    return this.connectionPromise;
-  }
+        request.onsuccess = (event) => {
+          const db = event.target.result;
+          this.db = db;
+          this.isOpening = false;
+          console.log('Database connection established successfully');
 
-  async openDB(forceReopen = false) {
-    if (forceReopen) {
-      if (this.db) {
-        this.db.close();
-      }
-      this.db = null;
-      this.isInitialized = false;
-      this.connectionPromise = null;
+          db.onversionchange = () => {
+            console.log('Database version changed by another connection');
+            db.close();
+            this.db = null;
+          };
+
+          resolve(db);
+        };
+      });
+    } catch (error) {
+      this.isOpening = false;
+      console.error('Error in openDB:', error);
+      throw error;
     }
-    return this.getConnection();
   }
 
   async saveAudio(audioBlob, text) {
-    console.log('Starting saveAudio operation...');
+    console.log('Saving audio data...');
 
     try {
+      // 入力データの検証
       if (!audioBlob || !(audioBlob instanceof Blob)) {
         throw new Error('無効な音声データです');
       }
       
-      if (!text || typeof text !== 'string') {
-        throw new Error('無効なテキストデータです');
-      }
+      const textToSave = text && typeof text === 'string' 
+        ? text.substring(0, 1000) 
+        : '音声データ';
 
-      const db = await this.getConnection();
+      // データベース接続を確保
+      const db = await this.openDB();
       
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audios'], 'readwrite');
-        
-        transaction.onerror = (event) => {
-          console.error('Transaction error:', event.target.error);
-          reject(event.target.error);
-        };
-        
-        const store = transaction.objectStore('audios');
+      // トランザクションを開始
+      return await new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction(['audios'], 'readwrite');
+          
+          transaction.oncomplete = () => {
+            console.log('Save transaction completed successfully');
+          };
+          
+          transaction.onerror = (event) => {
+            console.error('Save transaction error:', event.target.error);
+            reject(event.target.error);
+          };
+          
+          const store = transaction.objectStore('audios');
 
-        const record = {
-          blob: audioBlob,
-          text: text.substring(0, 1000),
-          timestamp: new Date(),
-          fileSize: audioBlob.size
-        };
+          // 保存するレコードを作成
+          const record = {
+            blob: audioBlob,
+            text: textToSave,
+            timestamp: new Date(),
+            fileSize: audioBlob.size,
+            duration: null // 音声の長さがわかれば設定
+          };
 
-        const request = store.add(record);
+          // レコードを追加
+          const request = store.add(record);
 
-        request.onsuccess = (event) => {
-          const id = event.target.result;
-          console.log('Audio saved with ID:', id);
-          resolve(id);
-        };
+          request.onsuccess = (event) => {
+            const id = event.target.result;
+            console.log('Audio saved successfully with ID:', id);
+            resolve(id);
+          };
 
-        request.onerror = (event) => {
-          console.error('Error in save operation:', event.target.error);
-          reject(event.target.error);
-        };
+          request.onerror = (event) => {
+            console.error('Error in save operation:', event.target.error);
+            reject(event.target.error);
+          };
+        } catch (transactionError) {
+          console.error('Error creating transaction:', transactionError);
+          reject(transactionError);
+        }
       });
     } catch (error) {
       console.error('Error in saveAudio:', error);
@@ -135,29 +167,50 @@ class AudioDatabase {
     console.log('Getting audio list...');
     
     try {
-      const db = await this.getConnection();
+      // データベース接続を確保
+      const db = await this.openDB();
       
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audios'], 'readonly');
-        
-        transaction.onerror = (event) => {
-          console.error('Transaction error:', event.target.error);
-          reject(event.target.error);
-        };
-        
-        const store = transaction.objectStore('audios');
-        const request = store.getAll();
+      // トランザクションを開始
+      return await new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction(['audios'], 'readonly');
+          
+          transaction.oncomplete = () => {
+            console.log('GetAudioList transaction completed successfully');
+          };
+          
+          transaction.onerror = (event) => {
+            console.error('GetAudioList transaction error:', event.target.error);
+            reject(event.target.error);
+          };
+          
+          const store = transaction.objectStore('audios');
+          
+          // 全てのレコードを取得
+          const request = store.getAll();
 
-        request.onsuccess = (event) => {
-          const records = event.target.result || [];
-          console.log(`Retrieved ${records.length} audio records`);
-          resolve(records);
-        };
+          request.onsuccess = (event) => {
+            const records = event.target.result || [];
+            console.log(`Retrieved ${records.length} audio records`);
+            
+            // 結果のチェック
+            if (records.length > 0) {
+              const sampleRecord = records[0];
+              const hasBlob = sampleRecord.blob instanceof Blob;
+              console.log(`Sample record: ID=${sampleRecord.id}, has blob=${hasBlob}, size=${hasBlob ? sampleRecord.blob.size : 'N/A'}`);
+            }
+            
+            resolve(records);
+          };
 
-        request.onerror = (event) => {
-          console.error('Error getting audio list:', event.target.error);
-          reject(event.target.error);
-        };
+          request.onerror = (event) => {
+            console.error('Error getting audio list:', event.target.error);
+            reject(event.target.error);
+          };
+        } catch (transactionError) {
+          console.error('Error creating transaction for getAudioList:', transactionError);
+          reject(transactionError);
+        }
       });
     } catch (error) {
       console.error('Error in getAudioList:', error);
@@ -168,22 +221,43 @@ class AudioDatabase {
   async getAudio(id) {
     console.log('Getting audio with ID:', id);
     
+    if (!id) {
+      throw new Error('無効なIDです');
+    }
+    
     try {
-      const db = await this.getConnection();
+      // データベース接続を確保
+      const db = await this.openDB();
       
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audios'], 'readonly');
-        const store = transaction.objectStore('audios');
-        const request = store.get(id);
+      // IDが数値の場合は変換
+      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+      
+      // トランザクションを開始
+      return await new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction(['audios'], 'readonly');
+          const store = transaction.objectStore('audios');
+          const request = store.get(numericId);
 
-        request.onsuccess = (event) => {
-          resolve(request.result);
-        };
+          request.onsuccess = () => {
+            const result = request.result;
+            if (result) {
+              console.log(`Found audio ID ${numericId}, has blob: ${result.blob instanceof Blob}`);
+              resolve(result);
+            } else {
+              console.warn(`Audio ID ${numericId} not found`);
+              resolve(null);
+            }
+          };
 
-        request.onerror = (event) => {
-          console.error('Error getting audio:', event.target.error);
-          reject(event.target.error);
-        };
+          request.onerror = (event) => {
+            console.error('Error getting audio:', event.target.error);
+            reject(event.target.error);
+          };
+        } catch (transactionError) {
+          console.error('Error creating transaction for getAudio:', transactionError);
+          reject(transactionError);
+        }
       });
     } catch (error) {
       console.error('Error in getAudio:', error);
@@ -194,23 +268,47 @@ class AudioDatabase {
   async deleteAudio(id) {
     console.log('Deleting audio with ID:', id);
     
+    if (!id) {
+      throw new Error('無効なIDです');
+    }
+    
     try {
-      const db = await this.getConnection();
+      // データベース接続を確保
+      const db = await this.openDB();
       
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audios'], 'readwrite');
-        const store = transaction.objectStore('audios');
-        const request = store.delete(id);
+      // IDが数値の場合は変換
+      const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+      
+      // トランザクションを開始
+      return await new Promise((resolve, reject) => {
+        try {
+          const transaction = db.transaction(['audios'], 'readwrite');
+          
+          transaction.oncomplete = () => {
+            console.log('Delete transaction completed successfully');
+          };
+          
+          transaction.onerror = (event) => {
+            console.error('Delete transaction error:', event.target.error);
+            reject(event.target.error);
+          };
+          
+          const store = transaction.objectStore('audios');
+          const request = store.delete(numericId);
 
-        request.onsuccess = () => {
-          console.log('Audio deleted successfully');
-          resolve();
-        };
+          request.onsuccess = () => {
+            console.log(`Audio ID ${numericId} deleted successfully`);
+            resolve();
+          };
 
-        request.onerror = (event) => {
-          console.error('Error deleting audio:', event.target.error);
-          reject(event.target.error);
-        };
+          request.onerror = (event) => {
+            console.error('Error deleting audio:', event.target.error);
+            reject(event.target.error);
+          };
+        } catch (transactionError) {
+          console.error('Error creating transaction for deleteAudio:', transactionError);
+          reject(transactionError);
+        }
       });
     } catch (error) {
       console.error('Error in deleteAudio:', error);
@@ -220,26 +318,39 @@ class AudioDatabase {
 
   async checkDatabaseState() {
     try {
-      const db = await this.getConnection();
+      // データベース接続を確保
+      const db = await this.openDB();
       
       return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['audios'], 'readonly');
-        const store = transaction.objectStore('audios');
-        const countRequest = store.count();
+        try {
+          const transaction = db.transaction(['audios'], 'readonly');
+          const store = transaction.objectStore('audios');
+          const countRequest = store.count();
 
-        countRequest.onsuccess = () => {
+          countRequest.onsuccess = () => {
+            resolve({
+              isOpen: true,
+              objectStoreExists: true,
+              recordCount: countRequest.result,
+              dbName: this.dbName,
+              dbVersion: this.dbVersion
+            });
+          };
+
+          countRequest.onerror = (event) => {
+            console.error('Error in count request:', event.target.error);
+            reject(event.target.error);
+          };
+        } catch (error) {
+          console.error('Error checking store:', error);
           resolve({
             isOpen: true,
-            objectStoreExists: true,
-            recordCount: countRequest.result,
+            objectStoreExists: false,
+            error: error.message,
             dbName: this.dbName,
             dbVersion: this.dbVersion
           });
-        };
-
-        countRequest.onerror = (event) => {
-          reject(event.target.error);
-        };
+        }
       });
     } catch (error) {
       console.error('Error checking database state:', error);
