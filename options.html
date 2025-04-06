@@ -33,6 +33,44 @@
 
     <div class="section">
       <h2 class="section-title">
+        <i class="material-icons">record_voice_over</i>
+        音声設定
+      </h2>
+      <div class="voice-settings">
+        <div class="form-group">
+          <label for="voiceType">音声タイプ:</label>
+          <select id="voiceType">
+            <optgroup label="女性の声">
+              <option value="af_heart">Heart Voice (デフォルト)</option>
+              <option value="af_alloy">Alloy Voice</option>
+              <option value="af_aoede">Aoede Voice</option>
+              <option value="af_bella">Bella Voice</option>
+              <option value="af_jessica">Jessica Voice</option>
+              <option value="af_kore">Kore Voice</option>
+              <option value="af_nicole">Nicole Voice</option>
+              <option value="af_nova">Nova Voice</option>
+              <option value="af_river">River Voice</option>
+              <option value="af_sarah">Sarah Voice</option>
+              <option value="af_sky">Sky Voice</option>
+            </optgroup>
+            <optgroup label="男性の声">
+              <option value="am_adam">Adam Voice</option>
+              <option value="am_echo">Echo Voice</option>
+              <option value="am_eric">Eric Voice</option>
+              <option value="am_fenrir">Fenrir Voice</option>
+              <option value="am_liam">Liam Voice</option>
+              <option value="am_michael">Michael Voice</option>
+              <option value="am_onyx">Onyx Voice</option>
+              <option value="am_puck">Puck Voice</option>
+              <option value="am_santa">Santa Voice</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">
         <i class="material-icons">library_music</i>
         保存済み音声一覧
       </h2>
@@ -40,6 +78,41 @@
         <div class="search-bar">
           <i class="material-icons">search</i>
           <input type="text" id="searchInput" placeholder="テキストを検索...">
+        </div>
+        <div class="filter-controls">
+          <select id="voiceFilter" class="filter-select">
+            <option value="">全ての音声タイプ</option>
+            <optgroup label="女性の声">
+              <option value="af_heart">Heart Voice</option>
+              <option value="af_alloy">Alloy Voice</option>
+              <option value="af_aoede">Aoede Voice</option>
+              <option value="af_bella">Bella Voice</option>
+              <option value="af_jessica">Jessica Voice</option>
+              <option value="af_kore">Kore Voice</option>
+              <option value="af_nicole">Nicole Voice</option>
+              <option value="af_nova">Nova Voice</option>
+              <option value="af_river">River Voice</option>
+              <option value="af_sarah">Sarah Voice</option>
+              <option value="af_sky">Sky Voice</option>
+            </optgroup>
+            <optgroup label="男性の声">
+              <option value="am_adam">Adam Voice</option>
+              <option value="am_echo">Echo Voice</option>
+              <option value="am_eric">Eric Voice</option>
+              <option value="am_fenrir">Fenrir Voice</option>
+              <option value="am_liam">Liam Voice</option>
+              <option value="am_michael">Michael Voice</option>
+              <option value="am_onyx">Onyx Voice</option>
+              <option value="am_puck">Puck Voice</option>
+              <option value="am_santa">Santa Voice</option>
+            </optgroup>
+          </select>
+          <select id="sortOrder" class="filter-select">
+            <option value="newest">新しい順</option>
+            <option value="oldest">古い順</option>
+            <option value="largest">サイズ大きい順</option>
+            <option value="smallest">サイズ小さい順</option>
+          </select>
         </div>
         <button id="refreshButton" class="refresh-button">
           <i class="material-icons">refresh</i>

@@ -20,7 +20,7 @@ class AudioDatabase {
   }
 
   // 音声データを保存
-  async saveAudio(audioBlob, text) {
+  async saveAudio(audioBlob, text, voiceType = 'af_heart') {
     console.log('Saving audio data...', new Date().toISOString());
 
     try {
@@ -33,12 +33,13 @@ class AudioDatabase {
       // 新しい音声データを作成
       const timestamp = new Date();
       const newAudio = {
-        id: Date.now(), // タイムスタンプをIDとして使用
+        id: Date.now(),
         blobData: base64,
         text: text && typeof text === 'string' ? text.substring(0, 1000) : '音声データ',
         timestamp: timestamp.getTime(),
         fileSize: audioBlob.size,
-        mimeType: audioBlob.type
+        mimeType: audioBlob.type,
+        voiceType: voiceType // 音声タイプを保存
       };
 
       // 配列に追加

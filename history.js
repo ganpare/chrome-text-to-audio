@@ -18,15 +18,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     await db.openDB();
     console.log('Database connection established');
 
-    // 検索機能の実装
+    // フィルタリングとソートの制御を追加
+    const sortOrderSelect = document.getElementById('sortOrder');
+    const voiceTypeSelect = document.getElementById('voiceType');
     const searchInput = document.getElementById('searchInput');
     let searchTimeout;
-    searchInput.addEventListener('input', () => {
+
+    // フィルタリング条件が変更されたときの処理
+    const handleFilterChange = () => {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         loadAudioList(searchInput.value);
       }, 300);
-    });
+    };
+
+    sortOrderSelect.addEventListener('change', handleFilterChange);
+    voiceTypeSelect.addEventListener('change', handleFilterChange);
+    searchInput.addEventListener('input', handleFilterChange);
 
     // 更新ボタンの実装
     const refreshButton = document.getElementById('refreshButton');
@@ -151,6 +159,8 @@ async function loadAudioList(searchQuery = '') {
   console.log('loadAudioList called with query:', searchQuery);
   const audioList = document.getElementById('audioList');
   const loading = document.querySelector('.loading');
+  const sortOrder = document.getElementById('sortOrder').value;
+  const voiceType = document.getElementById('voiceType').value;
 
   if (!audioList) {
     console.error('audioList element not found');
@@ -161,12 +171,11 @@ async function loadAudioList(searchQuery = '') {
     loading.classList.add('active');
     audioList.innerHTML = '';
 
-    // データベース接続を完全に更新 (強制的に再作成)
+    // データベース接続を完全に更新
     db = AudioDatabase.getInstance();
-    await db.openDB(true); // 強制的に再オープン
+    await db.openDB(true);
     console.log('Fetching audio list from database...');
 
-    // 複数回試行するための準備
     let retryCount = 0;
     const maxRetries = 3;
 
@@ -176,23 +185,55 @@ async function loadAudioList(searchQuery = '') {
       console.log(`Attempt ${retryCount + 1}: Retrieved audio files:`, audioFiles.length, 'items');
 
       if (audioFiles.length > 0) {
-        break; // データが見つかったらループを抜ける
+        break;
       }
 
       retryCount++;
       if (retryCount < maxRetries) {
         console.log(`No audio files found, waiting before next attempt...`);
-        await new Promise(resolve => setTimeout(resolve, 500)); // 次の試行前に少し待機
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
+    // フィルタリングとソートの適用
+    let filteredFiles = audioFiles;
 
-    const filteredFiles = searchQuery
-      ? audioFiles.filter(audio =>
-          audio.text.toLowerCase().includes(searchQuery.toLowerCase()))
-      : audioFiles;
+    // テキスト検索フィルター
+    if (searchQuery) {
+      filteredFiles = filteredFiles.filter(audio =>
+        audio.text.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
 
-    console.log('Filtered audio files:', filteredFiles.length, 'items');
+    // 音声タイプフィルター
+    if (voiceType !== 'all') {
+      filteredFiles = filteredFiles.filter(audio => {
+        if (voiceType === 'kokoro') {
+          return audio.voiceType === 'kokoro';
+        } else if (voiceType === 'custom') {
+          return audio.voiceType === 'custom';
+        }
+        return true;
+      });
+    }
+
+    // ソート順の適用
+    filteredFiles.sort((a, b) => {
+      switch (sortOrder) {
+        case 'newest':
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        case 'oldest':
+          return new Date(a.timestamp) - new Date(b.timestamp);
+        case 'size-desc':
+          return (b.size || 0) - (a.size || 0);
+        case 'size-asc':
+          return (a.size || 0) - (b.size || 0);
+        default:
+          return new Date(b.timestamp) - new Date(a.timestamp);
+      }
+    });
+
+    console.log('Filtered and sorted audio files:', filteredFiles.length, 'items');
 
     if (filteredFiles.length === 0) {
       console.log('No audio files found after filtering');
@@ -234,11 +275,6 @@ async function loadAudioList(searchQuery = '') {
 
       return;
     }
-
-    // 日付でソート（新しい順）
-    filteredFiles.sort((a, b) =>
-      new Date(b.timestamp) - new Date(a.timestamp)
-    );
 
     console.log('Rendering audio items...');
     for (const audio of filteredFiles) {

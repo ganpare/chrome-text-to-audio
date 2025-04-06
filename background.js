@@ -9,6 +9,17 @@ async function getFalApiKey() {
   }
 }
 
+// Function to get voice type from storage
+async function getVoiceType() {
+  try {
+    const result = await chrome.storage.sync.get('voiceType');
+    return result.voiceType || 'af_heart'; // デフォルトは心の声
+  } catch (error) {
+    console.error('Failed to retrieve voice type:', error);
+    return 'af_heart';
+  }
+}
+
 // Function to show error in the active tab
 async function showErrorMessage(message) {
   try {
@@ -241,10 +252,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 
     try {
+      const voiceType = await getVoiceType();
       const apiUrl = 'https://queue.fal.run/fal-ai/kokoro/american-english';
       const requestBody = {
         prompt: info.selectionText,
-        voice: "af_heart"
+        voice: voiceType
       };
 
       // APIにリクエストを送信
@@ -297,11 +309,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await wait(500);
       }
 
-      // 音声再生を試行
+      // 音声再生を試行（voiceTypeも一緒に送信）
       await chrome.tabs.sendMessage(tab.id, {
         action: "playAudio",
         url: audioUrl,
-        text: info.selectionText
+        text: info.selectionText,
+        voiceType: voiceType
       });
 
     } catch (error) {

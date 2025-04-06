@@ -63,13 +63,16 @@ function createAudioItem(audio, query) {
   metadata.className = 'audio-metadata';
   const duration = audio.duration ? `${Math.round(audio.duration)}秒` : '不明';
   const fileSize = audio.fileSize ? `${(audio.fileSize / 1024).toFixed(1)}KB` : '不明';
+  const voiceType = audio.voiceType || 'af_heart';
+
+  // 音声タイプの表示名を取得
+  const voiceDisplayName = getVoiceDisplayName(voiceType);
+
   metadata.innerHTML = `
     <div class="metadata-row">
-      <i class="material-icons">schedule</i>
-      ${new Date(audio.timestamp).toLocaleString()}
-    </div>
-    <div class="metadata-row">
-      <i class="material-icons">timer</i>
+      <i class="material-icons">record_voice_over</i>
+      ${voiceDisplayName}
+      <i class="material-icons" style="margin-left: 10px;">timer</i>
       ${duration}
       <i class="material-icons" style="margin-left: 10px;">save</i>
       ${fileSize}
@@ -184,6 +187,35 @@ function createAudioItem(audio, query) {
   return item;
 }
 
+// 音声タイプの表示名を取得する関数
+function getVoiceDisplayName(voiceType) {
+  const voiceMap = {
+    // 女性の声
+    'af_heart': 'Heart Voice',
+    'af_alloy': 'Alloy Voice',
+    'af_aoede': 'Aoede Voice',
+    'af_bella': 'Bella Voice',
+    'af_jessica': 'Jessica Voice',
+    'af_kore': 'Kore Voice',
+    'af_nicole': 'Nicole Voice',
+    'af_nova': 'Nova Voice',
+    'af_river': 'River Voice',
+    'af_sarah': 'Sarah Voice',
+    'af_sky': 'Sky Voice',
+    // 男性の声
+    'am_adam': 'Adam Voice',
+    'am_echo': 'Echo Voice',
+    'am_eric': 'Eric Voice',
+    'am_fenrir': 'Fenrir Voice',
+    'am_liam': 'Liam Voice',
+    'am_michael': 'Michael Voice',
+    'am_onyx': 'Onyx Voice',
+    'am_puck': 'Puck Voice',
+    'am_santa': 'Santa Voice'
+  };
+  return voiceMap[voiceType] || voiceType;
+}
+
 // 空の状態表示の作成
 function createEmptyState(query, error = null) {
   return `
@@ -216,30 +248,103 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// 音声一覧の並び替えとフィルタリング
+function applyFilters(audioList, searchQuery = '', voiceFilter = '', sortOrder = 'newest') {
+  let filteredFiles = [...audioList];
+
+  // テキスト検索フィルター
+  if (searchQuery) {
+    filteredFiles = filteredFiles.filter(audio => 
+      audio.text && audio.text.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }
+
+  // 音声タイプフィルター
+  if (voiceFilter) {
+    filteredFiles = filteredFiles.filter(audio => 
+      audio.voiceType === voiceFilter
+    );
+  }
+
+  // ソート
+  switch (sortOrder) {
+    case 'newest':
+      filteredFiles.sort((a, b) => b.timestamp - a.timestamp);
+      break;
+    case 'oldest':
+      filteredFiles.sort((a, b) => a.timestamp - b.timestamp);
+      break;
+    case 'largest':
+      filteredFiles.sort((a, b) => b.fileSize - a.fileSize);
+      break;
+    case 'smallest':
+      filteredFiles.sort((a, b) => a.fileSize - b.fileSize);
+      break;
+  }
+
+  return filteredFiles;
+}
+
 // イベントリスナーの設定
 function setupEventListeners() {
-  // APIキーの保存
+  // APIキーと音声タイプの保存
   document.getElementById('save').addEventListener('click', async () => {
     const apiKey = document.getElementById('apiKey').value.trim();
+    const voiceType = document.getElementById('voiceType').value;
+    
     if (!apiKey) {
       showStatus('APIキーを入力してください', 'error');
       return;
     }
 
     try {
-      await chrome.storage.sync.set({ falApiKey: apiKey });
+      await chrome.storage.sync.set({
+        falApiKey: apiKey,
+        voiceType: voiceType
+      });
       showStatus('設定を保存しました', 'success');
     } catch (error) {
       handleError(error, '設定の保存に失敗しました');
     }
   });
 
-  // 検索機能
+  // 音声タイプの変更時にも保存
+  document.getElementById('voiceType').addEventListener('change', async () => {
+    const voiceType = document.getElementById('voiceType').value;
+    try {
+      await chrome.storage.sync.set({ voiceType: voiceType });
+      showStatus('音声タイプを更新しました', 'success');
+    } catch (error) {
+      handleError(error, '音声タイプの保存に失敗しました');
+    }
+  });
+
+  // 音声タイプフィルター
+  const voiceFilter = document.getElementById('voiceFilter');
+  voiceFilter.addEventListener('change', () => {
+    const searchQuery = document.getElementById('searchInput').value;
+    const sortOrder = document.getElementById('sortOrder').value;
+    loadAudioList(searchQuery, voiceFilter.value, sortOrder);
+  });
+
+  // ソート順変更
+  const sortOrder = document.getElementById('sortOrder');
+  sortOrder.addEventListener('change', () => {
+    const searchQuery = document.getElementById('searchInput').value;
+    const voiceType = document.getElementById('voiceFilter').value;
+    loadAudioList(searchQuery, voiceType, sortOrder.value);
+  });
+
+  // 検索機能を更新
   const searchInput = document.getElementById('searchInput');
   let searchTimeout;
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => loadAudioList(searchInput.value), 300);
+    searchTimeout = setTimeout(() => {
+      const voiceType = document.getElementById('voiceFilter').value;
+      const sortOrder = document.getElementById('sortOrder').value;
+      loadAudioList(searchInput.value, voiceType, sortOrder);
+    }, 300);
   });
 
   // 更新ボタン
@@ -265,10 +370,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await refreshDatabaseConnection(true);
     audioFiles = await db.getAudioList();
 
-    // 保存されているAPIキーを読み込み
-    const result = await chrome.storage.sync.get('falApiKey');
+    // 保存されている設定を読み込み
+    const result = await chrome.storage.sync.get(['falApiKey', 'voiceType']);
     if (result.falApiKey) {
       document.getElementById('apiKey').value = result.falApiKey;
+    }
+    if (result.voiceType) {
+      document.getElementById('voiceType').value = result.voiceType;
     }
 
     // イベントリスナーの設定
@@ -293,7 +401,7 @@ function showStatus(message, type) {
 }
 
 // 音声一覧を読み込んで表示
-async function loadAudioList(query = '') {
+async function loadAudioList(query = '', voiceFilter = '', sortOrder = 'newest') {
   const audioList = document.getElementById('audioList');
   const loading = document.querySelector('.loading');
 
@@ -307,25 +415,13 @@ async function loadAudioList(query = '') {
     const db = AudioDatabase.getInstance();
     audioFiles = await db.getAudioList();
 
-    if (audioFiles.length > 0) {
-      // 表示用にblobを作成（必要な場合のみ）
-      if (audioFiles[0].blobData && !audioFiles[0].blob) {
-        audioFiles[0].blob = db.base64ToBlob(audioFiles[0].blobData, audioFiles[0].mimeType);
-      }
-    }
-
-    // 検索フィルター適用
-    const filteredFiles = query
-      ? audioFiles.filter(audio => audio.text && audio.text.toLowerCase().includes(query.toLowerCase()))
-      : audioFiles;
+    // フィルターとソートを適用
+    const filteredFiles = applyFilters(audioFiles, query, voiceFilter, sortOrder);
 
     if (filteredFiles.length === 0) {
       audioList.innerHTML = createEmptyState(query);
       return;
     }
-
-    // 日付でソート（新しい順）
-    filteredFiles.sort((a, b) => b.timestamp - a.timestamp);
 
     // 音声アイテムを表示
     for (const audio of filteredFiles) {
