@@ -322,3 +322,140 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
   }
 });
+
+// キーボードショートカットのハンドラー
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === "read-selected-text") {
+    try {
+      // 現在のアクティブなタブを取得
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) {
+        console.error('アクティブなタブが見つかりません');
+        return;
+      }
+
+      // タブのURLをチェック
+      if (!tab.url?.startsWith('http')) {
+        await showErrorMessage('このページでは音声再生を実行できません');
+        return;
+      }
+
+      // コンテンツスクリプトを確実に読み込む
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['dbHelper.js', 'contentScript.js']
+        });
+        // スクリプトの読み込みを待つ
+        await wait(500);
+      } catch (error) {
+        console.error('コンテンツスクリプトの読み込みに失敗:', error);
+        await showErrorMessage('ページの読み込みに失敗しました。ページを更新して再試行してください。');
+        return;
+      }
+
+      // 選択されたテキストを取得
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: () => window.getSelection().toString()
+      });
+
+      if (!result) {
+        await showErrorMessage('テキストが選択されていません');
+        return;
+      }
+
+      const apiKey = await getFalApiKey();
+      if (!apiKey) {
+        await showErrorMessage('APIキーが設定されていません。設定画面で入力してください。');
+        chrome.runtime.openOptionsPage();
+        return;
+      }
+
+      const voiceType = await getVoiceType();
+      const apiUrl = 'https://queue.fal.run/fal-ai/kokoro/american-english';
+      const requestBody = {
+        prompt: result,
+        voice: voiceType
+      };
+
+      // APIにリクエストを送信
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} - ${await response.text()}`);
+      }
+
+      const queueResult = await response.json();
+      if (!queueResult.status_url || !queueResult.response_url) {
+        throw new Error('必要な情報が見つかりません');
+      }
+
+      // ステータスをポーリングし、結果を取得
+      const finalResult = await pollStatus(queueResult.status_url, queueResult.response_url, apiKey);
+
+      // 音声URLを取得
+      let audioUrl = finalResult.audio_url || finalResult.audio?.url || finalResult.output?.url || finalResult.result?.url;
+      if (!audioUrl) {
+        throw new Error('音声URLが見つかりません');
+      }
+
+      // コンテンツスクリプトとの接続を確認
+      let connectionEstablished = false;
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('接続タイムアウト'));
+          }, 5000);
+
+          chrome.tabs.sendMessage(tab.id, { type: "PING" }, (response) => {
+            clearTimeout(timeout);
+            if (chrome.runtime.lastError) {
+              reject(chrome.runtime.lastError);
+            } else {
+              resolve(response);
+            }
+          });
+        });
+        connectionEstablished = true;
+      } catch (error) {
+        console.warn('コンテンツスクリプトとの接続に失敗:', error);
+        // 再接続を試みる
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['dbHelper.js', 'contentScript.js']
+          });
+          await wait(1000);
+          connectionEstablished = true;
+        } catch (retryError) {
+          console.error('再接続に失敗:', retryError);
+          await showErrorMessage('ページとの接続に失敗しました。ページを更新して再試行してください。');
+          return;
+        }
+      }
+
+      if (connectionEstablished) {
+        // 音声再生を試行
+        await chrome.tabs.sendMessage(tab.id, {
+          action: "playAudio",
+          url: audioUrl,
+          text: result,
+          voiceType: voiceType
+        });
+      }
+
+    } catch (error) {
+      console.error('キーボードショートカット処理中にエラー:', error);
+      await showErrorMessage(`エラーが発生しました: ${error.message}`);
+    }
+  }
+});
