@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Kokoro TTS Reader",
   "version": "1.0.0",
+  "author": "sungo",
   "permissions": [
     "contextMenus",
     "storage",
