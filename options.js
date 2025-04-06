@@ -6,7 +6,6 @@ let audioFiles = [];
 // 共通ユーティリティ関数
 // データベース接続を更新する共通関数
 async function refreshDatabaseConnection(force = false) {
-  console.log(`Refreshing database connection${force ? ' (forced)' : ''}`);
   db = AudioDatabase.getInstance();
   await db.openDB(force);
   return db;
@@ -15,15 +14,14 @@ async function refreshDatabaseConnection(force = false) {
 // ボタンの状態を更新する共通関数
 function updateButtonState(button, isLoading, defaultText, loadingText, icon = 'refresh') {
   if (!button) return;
-
+  
   button.disabled = isLoading;
   button.innerHTML = `<i class="material-icons">${icon}</i>${isLoading ? loadingText : defaultText}`;
 }
 
 // エラーハンドリングの共通関数
 function handleError(error, errorMessage) {
-  console.error(errorMessage, error);
-  showStatus(`${errorMessage}: ${error.message}`, 'error');
+  showStatus(`${errorMessage}`, 'error');
 }
 
 // 音声リストを更新する共通関数
@@ -93,14 +91,12 @@ function createAudioItem(audio, query) {
 
       // まずリストから取得したblobを使用
       if (audio.blob) {
-        console.log('Using blob data from list for ID:', audio.id);
         const success = await playAudio(audio.blob);
         if (success) {
           playButton.innerHTML = '<i class="material-icons">pause</i>一時停止';
         }
       } else {
         // リストにない場合は個別に取得
-        console.log('Blob not in list, fetching audio data for ID:', audio.id);
         const audioData = await db.getAudio(audio.id);
 
         if (!audioData || !audioData.blob) {
@@ -193,32 +189,24 @@ function createEmptyState(query, error = null) {
   return `
     <div class="empty-state">
       <i class="material-icons">${error ? 'error' : 'music_off'}</i>
-      <p>${error ? `音声の読み込みに失敗しました: ${error.message}` : (query ? '検索結果が見つかりません' : '保存された音声はありません')}</p>
+      <p>${error ? `音声の読み込みに失敗しました` : (query ? '検索結果が見つかりません' : '保存された音声はありません')}</p>
     </div>
   `;
 }
 
 // メッセージリスナーを設定
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Received message in options page:', message);
-
   if (message.action === 'refreshOptionsPage') {
-    console.log('Refreshing options page from message with timestamp:', message.timestamp);
     sendResponse({ success: true });
 
     setTimeout(async () => {
       try {
-        console.log('Delayed refresh starting now');
         await refreshDatabaseConnection(true);
-        const dbState = await db.checkDatabaseState();
-        console.log('Database state before refresh:', dbState);
         await loadAudioList();
-        console.log('Delayed refresh completed successfully');
         showStatus('最新の音声データを読み込みました', 'success');
       } catch (error) {
         handleError(error, '更新中にエラーが発生しました');
         if (message.force) {
-          console.log('Force refreshing page due to error...');
           location.reload();
         }
       }
@@ -267,73 +255,15 @@ function setupEventListeners() {
 
   // ページがフォーカスされたときに更新
   window.addEventListener('focus', async () => {
-    console.log('Page focused, refreshing audio list');
     await loadAudioList();
   });
 }
 
 // 初期化処理
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('DOM Content Loaded - Initializing options page');
-
   try {
-    // まず現在のデータベース状態を確認
-    const dbState = await db.checkDatabaseState();
-    console.log('Initial database state:', JSON.stringify(dbState, null, 2));
-
-    // データベース接続を強制的に更新
     await refreshDatabaseConnection(true);
-    console.log('Database connection refreshed forcefully');
-
-    // 更新後の状態を再確認
-    const updatedDbState = await db.checkDatabaseState();
-    console.log('Updated database state:', JSON.stringify(updatedDbState, null, 2));
-
-    console.log('Database initialized successfully');
-
-    // 音声リストを取得（複数回試行する）
-    let retryCount = 0;
-    const maxRetries = 3;
-    let fetchError = null;
-
-    while (retryCount < maxRetries) {
-      try {
-        console.log(`Fetching audio files (attempt ${retryCount + 1}/${maxRetries})...`);
-        audioFiles = await db.getAudioList();
-        console.log('Number of audio files in database:', audioFiles.length);
-
-        if (audioFiles.length > 0) {
-          console.log('Audio files found:', audioFiles.length);
-          console.log('First audio file:', JSON.stringify({
-            id: audioFiles[0].id,
-            text: audioFiles[0].text?.substring(0, 50) + '...',
-            timestamp: audioFiles[0].timestamp,
-            hasBlob: !!audioFiles[0].blob,
-            blobSize: audioFiles[0].blob?.size || 0,
-            fileSize: audioFiles[0].fileSize
-          }, null, 2));
-        } else {
-          console.log('No audio files found in database');
-        }
-
-        break; // 成功したらループを抜ける
-      } catch (error) {
-        fetchError = error;
-        console.error(`Error fetching audio files (attempt ${retryCount + 1}):`, error);
-        retryCount++;
-
-        if (retryCount < maxRetries) {
-          // 接続を再確立して再試行
-          await refreshDatabaseConnection(true);
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-    }
-
-    if (fetchError && retryCount >= maxRetries) {
-      console.error('Failed to fetch audio files after multiple attempts');
-      handleError(fetchError, '音声データの取得に失敗しました');
-    }
+    audioFiles = await db.getAudioList();
 
     // 保存されているAPIキーを読み込み
     const result = await chrome.storage.sync.get('falApiKey');
@@ -345,9 +275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
 
     // 初期データ読み込み
-    console.log('Starting initial audio list load');
     await loadAudioList();
-    console.log('Initial audio list load completed');
   } catch (error) {
     handleError(error, '初期化中にエラーが発生しました');
   }
@@ -366,14 +294,10 @@ function showStatus(message, type) {
 
 // 音声一覧を読み込んで表示
 async function loadAudioList(query = '') {
-  console.log('loadAudioList called with query:', query);
   const audioList = document.getElementById('audioList');
   const loading = document.querySelector('.loading');
 
-  if (!audioList) {
-    console.error('audioList element not found');
-    return;
-  }
+  if (!audioList) return;
 
   try {
     loading.classList.add('active');
@@ -381,19 +305,13 @@ async function loadAudioList(query = '') {
 
     // データベースから音声リストを取得
     const db = AudioDatabase.getInstance();
-    console.log('Fetching audio list from storage...');
-
-    // 音声リストを取得
     audioFiles = await db.getAudioList();
-    console.log(`Retrieved ${audioFiles.length} audio files`);
 
     if (audioFiles.length > 0) {
-      console.log('Sample audio record:', {
-        id: audioFiles[0].id,
-        text: audioFiles[0].text.substring(0, 30) + '...',
-        hasBlob: !!audioFiles[0].blobData,
-        size: audioFiles[0].fileSize
-      });
+      // 表示用にblobを作成（必要な場合のみ）
+      if (audioFiles[0].blobData && !audioFiles[0].blob) {
+        audioFiles[0].blob = db.base64ToBlob(audioFiles[0].blobData, audioFiles[0].mimeType);
+      }
     }
 
     // 検索フィルター適用
@@ -401,10 +319,7 @@ async function loadAudioList(query = '') {
       ? audioFiles.filter(audio => audio.text && audio.text.toLowerCase().includes(query.toLowerCase()))
       : audioFiles;
 
-    console.log('Filtered audio files:', filteredFiles.length, 'items');
-
     if (filteredFiles.length === 0) {
-      console.log('No audio files found after filtering');
       audioList.innerHTML = createEmptyState(query);
       return;
     }
@@ -412,9 +327,8 @@ async function loadAudioList(query = '') {
     // 日付でソート（新しい順）
     filteredFiles.sort((a, b) => b.timestamp - a.timestamp);
 
-    console.log('Rendering audio items...');
+    // 音声アイテムを表示
     for (const audio of filteredFiles) {
-      // 表示用にblobを作成（必要な場合のみ）
       if (audio.blobData && !audio.blob) {
         audio.blob = db.base64ToBlob(audio.blobData, audio.mimeType);
       }
@@ -451,10 +365,9 @@ async function playAudio(blob) {
       if (currentAudioId) playNextAudio(currentAudioId);
     };
 
-    audio.onerror = (error) => {
+    audio.onerror = () => {
       URL.revokeObjectURL(blobUrl);
       currentAudio = null;
-      console.error('Audio playback error:', error);
       throw new Error('音声の再生中にエラーが発生しました');
     };
 
@@ -473,7 +386,7 @@ async function playAudio(blob) {
 
 // 前の音声を再生
 async function playPreviousAudio(currentId) {
-  const sortedFiles = [...audioFiles].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const sortedFiles = [...audioFiles].sort((a, b) => b.timestamp - a.timestamp);
   const currentIndex = sortedFiles.findIndex(audio => audio.id === currentId);
   if (currentIndex > 0) {
     const previousAudio = sortedFiles[currentIndex - 1];
@@ -484,7 +397,7 @@ async function playPreviousAudio(currentId) {
 
 // 次の音声を再生
 async function playNextAudio(currentId) {
-  const sortedFiles = [...audioFiles].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const sortedFiles = [...audioFiles].sort((a, b) => b.timestamp - a.timestamp);
   const currentIndex = sortedFiles.findIndex(audio => audio.id === currentId);
   if (currentIndex >= 0 && currentIndex < sortedFiles.length - 1) {
     const nextAudio = sortedFiles[currentIndex + 1];
