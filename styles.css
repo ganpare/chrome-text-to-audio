@@ -294,6 +294,45 @@ button {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 10px;
+  margin: 0 15px;
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  font-size: 14px;
+  color: #333;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.filter-select:hover {
+  border-color: #2196F3;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.filter-select optgroup {
+  font-weight: 600;
+  color: #666;
+}
+
+.filter-select option {
+  font-weight: normal;
+  padding: 4px;
 }
 
 .search-bar {
@@ -453,4 +492,42 @@ button {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Voice settings */
+.voice-settings {
+  margin-top: 15px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.voice-settings .form-group {
+  margin-bottom: 0;
+}
+
+.voice-settings select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: white;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.voice-settings select:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 2px rgba(33,150,243,0.1);
+}
+
+.voice-settings optgroup {
+  font-weight: 600;
+  color: #666;
+}
+
+.voice-settings option {
+  font-weight: normal;
+  padding: 4px;
 }
