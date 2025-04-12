@@ -33,6 +33,10 @@
     "js": ["dbHelper.js", "contentScript.js"],
     "run_at": "document_start"
   }],
+  "web_accessible_resources": [{
+    "resources": ["*.wav", "*.mp3", "jszip.min.js"],
+    "matches": ["<all_urls>"]
+  }],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
