@@ -54,9 +54,6 @@ async function exportAllToAnki(filteredAudios = []) {
     let txtContent = '';
     const mediaFiles = [];
 
-    // ヘッダー行を追加
-    txtContent += "英語テキスト\t日本語テキスト\t音声ファイルパス\n";
-
     // 各音声を処理
     for (const audio of filteredAudios) {
       // 音声データをblobとして取得
@@ -321,9 +318,9 @@ function createAudioItem(audio, query) {
       document.body.appendChild(audioLink);
       audioLink.click();
 
-      // タブ区切りテキストデータの作成（ヘッダー付き）
+      // タブ区切りテキストデータの作成（ヘッダーなし）
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
-      const txtContent = `英語テキスト\t日本語テキスト\t音声ファイルパス\n${audio.text}\t${translation}\t[sound:${audioFileName}]`;
+      const txtContent = `${audio.text}\t${translation}\t[sound:${audioFileName}]`;
       const txtBlob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
       const txtUrl = URL.createObjectURL(txtBlob);
 
