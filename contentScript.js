@@ -83,16 +83,13 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       }
       console.log('音声データのサイズ:', audioBlob.size, 'bytes', 'type:', audioBlob.type);
 
-      let translation = '';
-      // Placeholder for DeepL translation -  Replace with actual DeepL integration
-      const useDeepL = localStorage.getItem('useDeepLTranslation') === 'true'; //Gets DeepL setting from local storage.
-      if (useDeepL) {
-        try {
-          translation = await deeplTranslate(message.text); // Placeholder function
-        } catch (translationError) {
-          console.error("DeepL translation failed:", translationError);
-          showErrorNotification("DeepL翻訳に失敗しました。");
-        }
+      // Check for translation from background script
+      let translation = message.translation || '';
+      console.log(`Received translation from background: ${translation ? `"${translation.substring(0, 30)}..."` : 'none'}`);
+      
+      // If no translation was provided, we won't attempt to translate again
+      if (!translation) {
+        console.log('No translation provided from background script');
       }
 
 
@@ -325,9 +322,4 @@ async function playAndSaveAudio(url, text, voiceType, translation = '') {
   }
 }
 
-// Placeholder for DeepL translation function
-async function deeplTranslate(text) {
-  // Replace this with actual DeepL API call
-  // ... DeepL API integration here ...
-  return "Translated Text (Placeholder)";
-}
+// Translation is now handled by the background script

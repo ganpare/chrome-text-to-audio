@@ -44,35 +44,54 @@ async function getAutoTranslateSetting() {
 
 // DeepL APIを使用してテキストを翻訳
 async function translateText(text, apiKey) {
-  if (!text || !apiKey) return null;
+  if (!text || !apiKey) {
+    console.log('Missing text or API key for translation');
+    return null;
+  }
+  
+  console.log(`Translating text: "${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"`);
   
   try {
-    const response = await fetch('https://api-free.deepl.com/v2/translate', {
+    const url = 'https://api-free.deepl.com/v2/translate';
+    console.log('Sending request to DeepL API:', url);
+    
+    const params = new URLSearchParams({
+      'text': text,
+      'target_lang': 'JA',
+      'source_lang': 'EN'
+    });
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Authorization': `DeepL-Auth-Key ${apiKey}`
       },
-      body: new URLSearchParams({
-        'text': text,
-        'target_lang': 'JA',
-        'source_lang': 'EN'
-      })
+      body: params
     });
 
+    console.log('DeepL API response status:', response.status);
+    
     if (!response.ok) {
-      console.error('DeepL API error:', await response.text());
-      return null;
+      const errorText = await response.text();
+      console.error('DeepL API error:', response.status, errorText);
+      throw new Error(`DeepL API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('DeepL API response data:', data);
+    
     if (data.translations && data.translations.length > 0) {
-      return data.translations[0].text;
+      const translationResult = data.translations[0].text;
+      console.log('Translation successful:', translationResult);
+      return translationResult;
+    } else {
+      console.error('No translations found in response');
+      return null;
     }
-    return null;
   } catch (error) {
     console.error('Translation error:', error);
-    return null;
+    throw error;
   }
 }
 
@@ -372,8 +391,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       if (autoTranslate) {
         const deeplApiKey = await getDeepLApiKey();
         if (deeplApiKey) {
-          translation = await translateText(info.selectionText, deeplApiKey);
+          try {
+            translation = await translateText(info.selectionText, deeplApiKey);
+            console.log("Translation result:", translation);
+          } catch (translationError) {
+            console.error("Translation error:", translationError);
+          }
+        } else {
+          console.log("DeepL API key not found, skipping translation");
         }
+      } else {
+        console.log("Auto-translate is disabled");
       }
 
       // 音声再生を試行（voiceTypeとtranslationも一緒に送信）
@@ -519,8 +547,17 @@ chrome.commands.onCommand.addListener(async (command) => {
         if (autoTranslate) {
           const deeplApiKey = await getDeepLApiKey();
           if (deeplApiKey) {
-            translation = await translateText(result, deeplApiKey);
+            try {
+              translation = await translateText(result, deeplApiKey);
+              console.log("Translation result:", translation);
+            } catch (translationError) {
+              console.error("Translation error:", translationError);
+            }
+          } else {
+            console.log("DeepL API key not found, skipping translation");
           }
+        } else {
+          console.log("Auto-translate is disabled");
         }
 
         // 音声再生を試行
