@@ -50,10 +50,12 @@ async function exportAllToAnki(filteredAudios = []) {
       throw new Error('エクスポートする音声がありません');
     }
 
-    // 音声ファイルとCSVデータを準備
-    let csvContent = '';
-    const zipFiles = [];
+    // タブ区切りテキストデータを準備
+    let txtContent = '';
     const mediaFiles = [];
+
+    // ヘッダー行を追加
+    txtContent += "英語テキスト\t日本語テキスト\t音声ファイルパス\n";
 
     // 各音声を処理
     for (const audio of filteredAudios) {
@@ -77,9 +79,9 @@ async function exportAllToAnki(filteredAudios = []) {
       const timestamp = new Date(audio.timestamp).toISOString().split('T')[0];
       const audioFileName = `${textPrefix}_${timestamp}.wav`;
 
-      // CSVの行を追加（新フォーマット：英語、日本語、音声、タグ）
+      // タブ区切りの行を追加 (英語テキスト、日本語テキスト、音声ファイルパス)
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
-      csvContent += `"${audio.text}","${translation}","[sound:${audioFileName}]","KokoroTTS"\n`;
+      txtContent += `${audio.text}\t${translation}\t${audioFileName}\n`;
 
       // 音声ファイルを追加
       mediaFiles.push({
@@ -88,34 +90,42 @@ async function exportAllToAnki(filteredAudios = []) {
       });
     }
 
-    // CSVファイルをダウンロード
-    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const csvUrl = URL.createObjectURL(csvBlob);
-    const csvLink = document.createElement('a');
-    csvLink.href = csvUrl;
-    csvLink.download = `anki_import_all_${Date.now()}.csv`;
-    document.body.appendChild(csvLink);
-    csvLink.click();
-    document.body.removeChild(csvLink);
+    // テキストファイルをダウンロード
+    const txtBlob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+    const txtUrl = URL.createObjectURL(txtBlob);
+    const txtLink = document.createElement('a');
+    txtLink.href = txtUrl;
+    txtLink.download = `anki_import_all_${Date.now()}.txt`;
+    document.body.appendChild(txtLink);
+    txtLink.click();
+    document.body.removeChild(txtLink);
 
-    // 音声ファイルを個別にダウンロード
-    for (const mediaFile of mediaFiles) {
-      const audioUrl = URL.createObjectURL(mediaFile.blob);
-      const audioLink = document.createElement('a');
-      audioLink.href = audioUrl;
-      audioLink.download = mediaFile.fileName;
-      document.body.appendChild(audioLink);
-      audioLink.click();
-      document.body.removeChild(audioLink);
-      URL.revokeObjectURL(audioUrl);
+    // 音声ファイルを順次ダウンロード（各ファイル間に少し間隔を空ける）
+    for (let i = 0; i < mediaFiles.length; i++) {
+      try {
+        const mediaFile = mediaFiles[i];
+        const audioUrl = URL.createObjectURL(mediaFile.blob);
+        const audioLink = document.createElement('a');
+        audioLink.href = audioUrl;
+        audioLink.download = mediaFile.fileName;
+        document.body.appendChild(audioLink);
+        audioLink.click();
+        document.body.removeChild(audioLink);
+        URL.revokeObjectURL(audioUrl);
 
-      // 少し待機して連続ダウンロードによるブラウザのブロックを回避
-      await new Promise(resolve => setTimeout(resolve, 100));
+        // 特に多くのファイルがある場合は、ブラウザが詰まらないよう間隔を空ける
+        if (i < mediaFiles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (fileError) {
+        console.error(`ファイル ${i+1}/${mediaFiles.length} のダウンロード中にエラー:`, fileError);
+        // エラーが発生しても続行
+      }
     }
 
-    URL.revokeObjectURL(csvUrl);
+    URL.revokeObjectURL(txtUrl);
 
-    showStatus(`${mediaFiles.length}件の音声データをAnki形式でエクスポートしました。音声ファイルとCSVファイルをAnkiにインポートしてください。`, 'success');
+    showStatus(`${mediaFiles.length}件の音声データをタブ区切りテキスト形式でエクスポートしました。`, 'success');
     return true;
   } catch (error) {
     handleError(error, 'Ankiエクスポートに失敗しました');
@@ -311,31 +321,30 @@ function createAudioItem(audio, query) {
       document.body.appendChild(audioLink);
       audioLink.click();
 
-      // CSVデータの作成
-      // 新しいフォーマット: 英語, 日本語, [sound:音声ファイル名], タグ
+      // タブ区切りテキストデータの作成（ヘッダー付き）
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
-      const csvContent = `"${audio.text}","${translation}","[sound:${audioFileName}]","KokoroTTS"\n`;
-      const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const csvUrl = URL.createObjectURL(csvBlob);
+      const txtContent = `英語テキスト\t日本語テキスト\t音声ファイルパス\n${audio.text}\t${translation}\t${audioFileName}`;
+      const txtBlob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+      const txtUrl = URL.createObjectURL(txtBlob);
 
-      // CSVをダウンロード
-      const csvLink = document.createElement('a');
-      csvLink.href = csvUrl;
-      csvLink.download = `anki_import_${textPrefix}.csv`;
-      document.body.appendChild(csvLink);
-      csvLink.click();
+      // テキストファイルをダウンロード
+      const txtLink = document.createElement('a');
+      txtLink.href = txtUrl;
+      txtLink.download = `anki_import_${textPrefix}.txt`;
+      document.body.appendChild(txtLink);
+      txtLink.click();
 
       // クリーンアップ
       setTimeout(() => {
         document.body.removeChild(audioLink);
-        document.body.removeChild(csvLink);
+        document.body.removeChild(txtLink);
         URL.revokeObjectURL(audioUrl);
-        URL.revokeObjectURL(csvUrl);
+        URL.revokeObjectURL(txtUrl);
       }, 100);
 
-      showStatus('Ankiエクスポートが完了しました。音声ファイルとCSVファイルをAnkiのメディアフォルダにインポートしてください。', 'success');
+      showStatus('エクスポートが完了しました。音声ファイルとテキストファイルをAnkiにインポートしてください。', 'success');
     } catch (error) {
-      handleError(error, 'Ankiエクスポートに失敗しました');
+      handleError(error, 'エクスポートに失敗しました');
     }
   });
 
