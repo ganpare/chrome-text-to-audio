@@ -37,6 +37,91 @@ async function refreshAudioList(query = '') {
   }
 }
 
+
+// 一括Ankiエクスポート機能
+async function exportAllToAnki(filteredAudios = []) {
+  try {
+    if (!filteredAudios || filteredAudios.length === 0) {
+      // フィルタリングされていない場合は全ての音声を取得
+      filteredAudios = await db.getAudioList();
+    }
+
+    if (filteredAudios.length === 0) {
+      throw new Error('エクスポートする音声がありません');
+    }
+
+    // 音声ファイルとCSVデータを準備
+    let csvContent = '';
+    const zipFiles = [];
+    const mediaFiles = [];
+
+    // 各音声を処理
+    for (const audio of filteredAudios) {
+      // 音声データをblobとして取得
+      let audioData;
+      if (audio.blob) {
+        audioData = audio.blob;
+      } else {
+        const fullAudio = await db.getAudio(audio.id);
+        if (!fullAudio || !fullAudio.blob) {
+          console.warn(`音声ID ${audio.id} のblobデータが見つかりません。スキップします。`);
+          continue;
+        }
+        audioData = fullAudio.blob;
+      }
+
+      // ファイル名を生成（テキストの先頭20文字を使用）
+      const textPrefix = audio.text 
+        ? audio.text.substring(0, 20).replace(/[^\w\s]/gi, '').trim() 
+        : 'audio';
+      const timestamp = new Date(audio.timestamp).toISOString().split('T')[0];
+      const audioFileName = `${textPrefix}_${timestamp}.wav`;
+
+      // CSVの行を追加
+      csvContent += `"${audio.text}","[sound:${audioFileName}]","KokoroTTS"\n`;
+      
+      // 音声ファイルを追加
+      mediaFiles.push({
+        fileName: audioFileName,
+        blob: audioData
+      });
+    }
+
+    // CSVファイルをダウンロード
+    const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const csvUrl = URL.createObjectURL(csvBlob);
+    const csvLink = document.createElement('a');
+    csvLink.href = csvUrl;
+    csvLink.download = `anki_import_all_${Date.now()}.csv`;
+    document.body.appendChild(csvLink);
+    csvLink.click();
+    document.body.removeChild(csvLink);
+
+    // 音声ファイルを個別にダウンロード
+    for (const mediaFile of mediaFiles) {
+      const audioUrl = URL.createObjectURL(mediaFile.blob);
+      const audioLink = document.createElement('a');
+      audioLink.href = audioUrl;
+      audioLink.download = mediaFile.fileName;
+      document.body.appendChild(audioLink);
+      audioLink.click();
+      document.body.removeChild(audioLink);
+      URL.revokeObjectURL(audioUrl);
+      
+      // 少し待機して連続ダウンロードによるブラウザのブロックを回避
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    URL.revokeObjectURL(csvUrl);
+    
+    showStatus(`${mediaFiles.length}件の音声データをAnki形式でエクスポートしました。音声ファイルとCSVファイルをAnkiにインポートしてください。`, 'success');
+    return true;
+  } catch (error) {
+    handleError(error, 'Ankiエクスポートに失敗しました');
+    return false;
+  }
+}
+
 // UIコンポーネント作成関数
 function createButton(className, icon, text, onClick, title = '') {
   const button = document.createElement('button');
@@ -162,6 +247,62 @@ function createAudioItem(audio, query) {
     }
   });
 
+  // Ankiエクスポートボタン
+  const ankiExportButton = createButton('anki-export-button', 'text_snippet', 'Ankiエクスポート', async () => {
+    try {
+      // blobデータを取得
+      let blob;
+      if (audio.blob) {
+        blob = audio.blob;
+      } else {
+        const audioData = await db.getAudio(audio.id);
+        if (!audioData || !audioData.blob) {
+          throw new Error('音声データが見つかりません');
+        }
+        blob = audioData.blob;
+      }
+
+      // 音声ファイル名の生成（テキストの先頭20文字を使用）
+      const textPrefix = audio.text 
+        ? audio.text.substring(0, 20).replace(/[^\w\s]/gi, '').trim() 
+        : 'audio';
+      const audioFileName = `${textPrefix}_${new Date(audio.timestamp).toISOString().split('T')[0]}.wav`;
+      
+      // 音声ファイルをダウンロード
+      const audioUrl = URL.createObjectURL(blob);
+      const audioLink = document.createElement('a');
+      audioLink.href = audioUrl;
+      audioLink.download = audioFileName;
+      document.body.appendChild(audioLink);
+      audioLink.click();
+      
+      // CSVデータの作成
+      // フォーマット: 表面,裏面,[タグ],[メディアファイル名]
+      const csvContent = `"${audio.text}","[sound:${audioFileName}]","KokoroTTS"\n`;
+      const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const csvUrl = URL.createObjectURL(csvBlob);
+      
+      // CSVをダウンロード
+      const csvLink = document.createElement('a');
+      csvLink.href = csvUrl;
+      csvLink.download = `anki_import_${textPrefix}.csv`;
+      document.body.appendChild(csvLink);
+      csvLink.click();
+
+      // クリーンアップ
+      setTimeout(() => {
+        document.body.removeChild(audioLink);
+        document.body.removeChild(csvLink);
+        URL.revokeObjectURL(audioUrl);
+        URL.revokeObjectURL(csvUrl);
+      }, 100);
+
+      showStatus('Ankiエクスポートが完了しました。音声ファイルとCSVファイルをAnkiのメディアフォルダにインポートしてください。', 'success');
+    } catch (error) {
+      handleError(error, 'Ankiエクスポートに失敗しました');
+    }
+  });
+
   // 削除ボタン
   const deleteButton = createButton('delete-button', 'delete', '削除', async () => {
     if (confirm('この音声を削除してもよろしいですか？')) {
@@ -179,6 +320,7 @@ function createAudioItem(audio, query) {
   controls.appendChild(playButton);
   controls.appendChild(nextButton);
   controls.appendChild(downloadButton);
+  controls.appendChild(ankiExportButton);
   controls.appendChild(deleteButton);
 
   item.appendChild(text);
@@ -357,6 +499,43 @@ function setupEventListeners() {
       updateButtonState(refreshButton, false, '更新', '更新中...');
     }
   });
+
+  // 一括Ankiエクスポートボタン
+  const ankiExportAllButton = document.getElementById('ankiExportAllButton');
+  if (ankiExportAllButton) {
+    ankiExportAllButton.addEventListener('click', async () => {
+      try {
+        updateButtonState(ankiExportAllButton, true, 'Ankiエクスポート', 'エクスポート中...', 'school');
+        
+        // 現在のフィルター条件を取得
+        const searchQuery = document.getElementById('searchInput').value;
+        const voiceFilter = document.getElementById('voiceFilter').value;
+        const sortOrder = document.getElementById('sortOrder').value;
+        
+        // フィルタリングされた音声リストを取得
+        const audioList = await db.getAudioList();
+        const filteredList = applyFilters(audioList, searchQuery, voiceFilter, sortOrder);
+        
+        if (filteredList.length === 0) {
+          throw new Error('エクスポートする音声がありません');
+        }
+        
+        if (filteredList.length > 50) {
+          if (!confirm(`${filteredList.length}件の音声をエクスポートします。大量の音声ファイルがダウンロードされますが、続行しますか？`)) {
+            return;
+          }
+        } else if (!confirm(`${filteredList.length}件の音声をAnki形式でエクスポートします。続行しますか？`)) {
+          return;
+        }
+        
+        await exportAllToAnki(filteredList);
+      } catch (error) {
+        handleError(error, 'Ankiエクスポートに失敗しました');
+      } finally {
+        updateButtonState(ankiExportAllButton, false, 'Ankiエクスポート', 'エクスポート中...', 'school');
+      }
+    });
+  }
 
   // ページがフォーカスされたときに更新
   window.addEventListener('focus', async () => {

@@ -356,7 +356,7 @@ button {
   box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
-.refresh-button, .reset-button {
+.refresh-button, .reset-button, .anki-export-button {
   background-color: #f5f5f5;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -367,12 +367,21 @@ button {
   cursor: pointer;
 }
 
-.refresh-button:hover, .reset-button:hover {
+.refresh-button:hover, .reset-button:hover, .anki-export-button:hover {
   background-color: #e0e0e0;
 }
 
-.refresh-button i, .reset-button i {
+.refresh-button i, .reset-button i, .anki-export-button i {
   margin-right: 5px;
+}
+
+.anki-export-button {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.anki-export-button:hover {
+  background-color: #c8e6c9;
 }
 
 .reset-button {
