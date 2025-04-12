@@ -77,8 +77,9 @@ async function exportAllToAnki(filteredAudios = []) {
       const timestamp = new Date(audio.timestamp).toISOString().split('T')[0];
       const audioFileName = `${textPrefix}_${timestamp}.wav`;
 
-      // CSVの行を追加
-      csvContent += `"${audio.text}","[sound:${audioFileName}]","KokoroTTS"\n`;
+      // CSVの行を追加（新フォーマット：英語、日本語、音声、タグ）
+      const translation = audio.translation || ''; // 翻訳がない場合は空文字
+      csvContent += `"${audio.text}","${translation}","[sound:${audioFileName}]","KokoroTTS"\n`;
       
       // 音声ファイルを追加
       mediaFiles.push({
@@ -138,10 +139,44 @@ function createAudioItem(audio, query) {
   item.className = 'audio-item';
   item.dataset.audioId = audio.id;
 
-  // テキスト部分
+  // テキスト部分（元の英語テキスト）
   const text = document.createElement('div');
   text.className = 'audio-text';
   text.textContent = audio.text || 'テキストなし';
+  
+  // 翻訳テキスト部分（日本語訳）
+  const translation = document.createElement('div');
+  translation.className = 'audio-translation';
+  
+  // 翻訳テキストがある場合は表示、ない場合は編集ボタンのみ表示
+  if (audio.translation) {
+    translation.innerHTML = `
+      <div class="translation-text">${audio.translation}</div>
+      <button class="edit-translation-button" title="翻訳を編集">
+        <i class="material-icons">edit</i>
+      </button>
+    `;
+  } else {
+    translation.innerHTML = `
+      <div class="translation-placeholder">翻訳なし</div>
+      <button class="add-translation-button" title="翻訳を追加">
+        <i class="material-icons">translate</i>追加
+      </button>
+    `;
+  }
+  
+  // 翻訳編集ボタンのイベントハンドラ
+  const editButton = translation.querySelector('.edit-translation-button, .add-translation-button');
+  if (editButton) {
+    editButton.addEventListener('click', () => {
+      const currentTranslation = audio.translation || '';
+      const newTranslation = prompt('日本語訳を入力してください:', currentTranslation);
+      
+      if (newTranslation !== null) {
+        updateTranslation(audio.id, newTranslation);
+      }
+    });
+  }
 
   // メタデータ部分
   const metadata = document.createElement('div');
@@ -277,8 +312,9 @@ function createAudioItem(audio, query) {
       audioLink.click();
       
       // CSVデータの作成
-      // フォーマット: 表面,裏面,[タグ],[メディアファイル名]
-      const csvContent = `"${audio.text}","[sound:${audioFileName}]","KokoroTTS"\n`;
+      // 新しいフォーマット: 英語, 日本語, [sound:音声ファイル名], タグ
+      const translation = audio.translation || ''; // 翻訳がない場合は空文字
+      const csvContent = `"${audio.text}","${translation}","[sound:${audioFileName}]","KokoroTTS"\n`;
       const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const csvUrl = URL.createObjectURL(csvBlob);
       
@@ -324,6 +360,7 @@ function createAudioItem(audio, query) {
   controls.appendChild(deleteButton);
 
   item.appendChild(text);
+  item.appendChild(translation);
   item.appendChild(metadata);
   item.appendChild(controls);
   return item;
@@ -483,6 +520,37 @@ function setupEventListeners() {
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
+
+// 翻訳テキストを更新する関数
+async function updateTranslation(audioId, newTranslation) {
+  try {
+    // 全てのデータを取得
+    let audios = await db.getAudioList();
+    
+    // 該当するオーディオを探す
+    const audioIndex = audios.findIndex(a => a.id === audioId);
+    
+    if (audioIndex === -1) {
+      throw new Error('音声データが見つかりません');
+    }
+    
+    // 翻訳を更新
+    audios[audioIndex].translation = newTranslation;
+    
+    // 保存
+    await chrome.storage.local.set({ [db.storageKey]: audios });
+    
+    // UIを更新
+    await loadAudioList(document.getElementById('searchInput').value);
+    
+    showStatus('翻訳を更新しました', 'success');
+    return true;
+  } catch (error) {
+    handleError(error, '翻訳の更新に失敗しました');
+    return false;
+  }
+}
+
       const voiceType = document.getElementById('voiceFilter').value;
       const sortOrder = document.getElementById('sortOrder').value;
       loadAudioList(searchInput.value, voiceType, sortOrder);

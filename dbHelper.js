@@ -20,7 +20,7 @@ class AudioDatabase {
   }
 
   // 音声データを保存
-  async saveAudio(audioBlob, text, voiceType = 'af_heart') {
+  async saveAudio(audioBlob, text, voiceType = 'af_heart', translation = '') {
     console.log('Saving audio data...', new Date().toISOString());
 
     try {
@@ -36,6 +36,7 @@ class AudioDatabase {
         id: Date.now(),
         blobData: base64,
         text: text && typeof text === 'string' ? text.substring(0, 1000) : '音声データ',
+        translation: translation && typeof translation === 'string' ? translation.substring(0, 1000) : '',
         timestamp: timestamp.getTime(),
         fileSize: audioBlob.size,
         mimeType: audioBlob.type,

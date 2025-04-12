@@ -147,9 +147,52 @@ button {
 
 .audio-text {
   font-size: 14px;
-  margin-bottom: 10px;
+  margin-bottom: 5px;
   color: #333;
   line-height: 1.4;
+}
+
+.audio-translation {
+  font-size: 14px;
+  margin-bottom: 10px;
+  color: #0056b3;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.translation-text {
+  flex: 1;
+}
+
+.translation-placeholder {
+  color: #999;
+  font-style: italic;
+  flex: 1;
+}
+
+.edit-translation-button, .add-translation-button {
+  background: transparent;
+  border: none;
+  color: #2196F3;
+  cursor: pointer;
+  padding: 2px 5px;
+  margin-left: 5px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+}
+
+.edit-translation-button:hover, .add-translation-button:hover {
+  color: #0056b3;
+  background-color: #f0f8ff;
+  border-radius: 3px;
+}
+
+.add-translation-button i, .edit-translation-button i {
+  font-size: 14px;
+  margin-right: 3px;
 }
 
 .audio-metadata {
