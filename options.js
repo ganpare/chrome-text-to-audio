@@ -51,9 +51,19 @@ async function exportAllToAnki(filteredAudios = []) {
     }
 
     // JSZipライブラリを読み込む
-    const JSZip = window.JSZip;
-    if (!JSZip) {
-      throw new Error('ZIPライブラリが見つかりません');
+    let JSZip;
+    try {
+      JSZip = window.JSZip;
+      if (!JSZip) {
+        console.error('window.JSZipが見つかりません。直接JSZipを試します。');
+        JSZip = jszip;
+      }
+      if (!JSZip) {
+        throw new Error('ZIPライブラリが見つかりません');
+      }
+    } catch (error) {
+      console.error('JSZipの読み込みエラー:', error);
+      throw new Error('ZIPライブラリの初期化に失敗しました: ' + error.message);
     }
 
     // 新しいZIPアーカイブを作成
@@ -98,18 +108,49 @@ async function exportAllToAnki(filteredAudios = []) {
     const txtFileName = `anki_import_all_${Date.now()}.txt`;
     zip.file(txtFileName, txtContent);
 
-    // ZIPファイルを生成
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    console.log('ZIPファイル生成開始...');
+    console.log('圧縮対象ファイル数:', audioFilesCount);
+    
+    try {
+      // ZIPファイルを生成
+      console.log('zip.generateAsync呼び出し前');
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 5 }
+      });
+      console.log('ZIPファイル生成完了:', zipBlob.size, 'バイト');
 
-    // ZIPファイルをダウンロード
-    const zipUrl = URL.createObjectURL(zipBlob);
-    const zipLink = document.createElement('a');
-    zipLink.href = zipUrl;
-    zipLink.download = `anki_export_${Date.now()}.zip`;
-    document.body.appendChild(zipLink);
-    zipLink.click();
-    document.body.removeChild(zipLink);
-    URL.revokeObjectURL(zipUrl);
+      // ZIPファイルをダウンロード
+      const zipUrl = URL.createObjectURL(zipBlob);
+      console.log('URLオブジェクト作成:', zipUrl);
+      
+      const zipLink = document.createElement('a');
+      zipLink.href = zipUrl;
+      zipLink.download = `anki_export_${Date.now()}.zip`;
+      console.log('ダウンロードリンク作成:', zipLink.download);
+      
+      // 見えるように表示して、クリックのトラブルを回避
+      zipLink.style.display = 'none';
+      document.body.appendChild(zipLink);
+      console.log('リンクをDOM追加完了');
+      
+      // クリックをトリガー
+      console.log('click()呼び出し前');
+      zipLink.click();
+      console.log('click()呼び出し完了');
+      
+      // 少し待ってからクリーンアップ（即時削除だとダウンロードが始まらないことがある）
+      setTimeout(() => {
+        document.body.removeChild(zipLink);
+        URL.revokeObjectURL(zipUrl);
+        console.log('クリーンアップ完了');
+      }, 1000);
+    } catch (zipError) {
+      console.error('ZIPファイル生成中のエラー:', zipError);
+      showStatus(`ZIPファイル生成エラー: ${zipError.message}`, 'error');
+      throw zipError;
+    }
 
     showStatus(`${audioFilesCount}件の音声データと1件のテキストファイルをZIPアーカイブにエクスポートしました。`, 'success');
     return true;

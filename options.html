@@ -143,6 +143,13 @@
 
   <script src="dbHelper.js"></script>
   <script src="jszip.min.js"></script>
+  <script>
+    // JSZipがグローバルに利用可能か確認
+    if (typeof JSZip === 'undefined') {
+      console.warn('JSZipがグローバルスコープに読み込まれていません。window.JSZipを定義します。');
+      window.JSZip = window.jszip || window.JSZip;
+    }
+  </script>
   <script src="options.js"></script>
 </body>
 </html>
