@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kokoro TTS Reader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "sungo",
   "permissions": [
     "contextMenus",
@@ -42,9 +42,11 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "commands": {
+  },  "commands": {
     "read-selected-text": {
+      "suggested_key": {
+        "default": "Alt+R"
+      },
       "description": "選択したテキストを読み上げる"
     }
   }
