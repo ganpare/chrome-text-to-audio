@@ -469,7 +469,9 @@ function setupEventListeners() {
   // APIキーと音声タイプの保存
   document.getElementById('save').addEventListener('click', async () => {
     const apiKey = document.getElementById('apiKey').value.trim();
+    const deeplApiKey = document.getElementById('deeplApiKey').value.trim();
     const voiceType = document.getElementById('voiceType').value;
+    const autoTranslate = document.getElementById('autoTranslate').checked;
 
     if (!apiKey) {
       showStatus('APIキーを入力してください', 'error');
@@ -479,7 +481,9 @@ function setupEventListeners() {
     try {
       await chrome.storage.sync.set({
         falApiKey: apiKey,
-        voiceType: voiceType
+        deeplApiKey: deeplApiKey,
+        voiceType: voiceType,
+        autoTranslate: autoTranslate
       });
       showStatus('設定を保存しました', 'success');
     } catch (error) {
@@ -628,12 +632,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     audioFiles = await db.getAudioList();
 
     // 保存されている設定を読み込み
-    const result = await chrome.storage.sync.get(['falApiKey', 'voiceType']);
+    const result = await chrome.storage.sync.get(['falApiKey', 'deeplApiKey', 'voiceType', 'autoTranslate']);
     if (result.falApiKey) {
       document.getElementById('apiKey').value = result.falApiKey;
     }
+    if (result.deeplApiKey) {
+      document.getElementById('deeplApiKey').value = result.deeplApiKey;
+    }
     if (result.voiceType) {
       document.getElementById('voiceType').value = result.voiceType;
+    }
+    if (result.autoTranslate !== undefined) {
+      document.getElementById('autoTranslate').checked = result.autoTranslate;
     }
 
     // イベントリスナーの設定

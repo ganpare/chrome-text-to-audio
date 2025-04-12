@@ -20,6 +20,62 @@ async function getVoiceType() {
   }
 }
 
+// DeepL APIキーを取得
+async function getDeepLApiKey() {
+  try {
+    const result = await chrome.storage.sync.get('deeplApiKey');
+    return result.deeplApiKey || null;
+  } catch (error) {
+    console.error('Failed to retrieve DeepL API key:', error);
+    return null;
+  }
+}
+
+// 自動翻訳設定を取得
+async function getAutoTranslateSetting() {
+  try {
+    const result = await chrome.storage.sync.get('autoTranslate');
+    return result.autoTranslate === true;
+  } catch (error) {
+    console.error('Failed to retrieve auto translate setting:', error);
+    return false;
+  }
+}
+
+// DeepL APIを使用してテキストを翻訳
+async function translateText(text, apiKey) {
+  if (!text || !apiKey) return null;
+  
+  try {
+    const response = await fetch('https://api-free.deepl.com/v2/translate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `DeepL-Auth-Key ${apiKey}`
+      },
+      body: new URLSearchParams({
+        'text': text,
+        'target_lang': 'JA',
+        'source_lang': 'EN'
+      })
+    });
+
+    if (!response.ok) {
+      console.error('DeepL API error:', await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.translations && data.translations.length > 0) {
+      return data.translations[0].text;
+    }
+    return null;
+  } catch (error) {
+    console.error('Translation error:', error);
+    return null;
+  }
+}
+
 // Function to show error in the active tab
 async function showErrorMessage(message) {
   try {
@@ -309,12 +365,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         await wait(500);
       }
 
-      // 音声再生を試行（voiceTypeも一緒に送信）
+      // 必要に応じてテキストを翻訳
+      let translation = null;
+      const autoTranslate = await getAutoTranslateSetting();
+      
+      if (autoTranslate) {
+        const deeplApiKey = await getDeepLApiKey();
+        if (deeplApiKey) {
+          translation = await translateText(info.selectionText, deeplApiKey);
+        }
+      }
+
+      // 音声再生を試行（voiceTypeとtranslationも一緒に送信）
       await chrome.tabs.sendMessage(tab.id, {
         action: "playAudio",
         url: audioUrl,
         text: info.selectionText,
-        voiceType: voiceType
+        voiceType: voiceType,
+        translation: translation
       });
 
     } catch (error) {
@@ -444,12 +512,24 @@ chrome.commands.onCommand.addListener(async (command) => {
       }
 
       if (connectionEstablished) {
+        // 必要に応じてテキストを翻訳
+        let translation = null;
+        const autoTranslate = await getAutoTranslateSetting();
+        
+        if (autoTranslate) {
+          const deeplApiKey = await getDeepLApiKey();
+          if (deeplApiKey) {
+            translation = await translateText(result, deeplApiKey);
+          }
+        }
+
         // 音声再生を試行
         await chrome.tabs.sendMessage(tab.id, {
           action: "playAudio",
           url: audioUrl,
           text: result,
-          voiceType: voiceType
+          voiceType: voiceType,
+          translation: translation
         });
       }
 

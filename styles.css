@@ -206,6 +206,17 @@ button {
   cursor: not-allowed;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-right: 8px;
+}
+
 .edit-translation-button:hover, .add-translation-button:hover {
   color: #0056b3;
   background-color: #f0f8ff;

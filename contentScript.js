@@ -83,10 +83,23 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       }
       console.log('音声データのサイズ:', audioBlob.size, 'bytes', 'type:', audioBlob.type);
 
+      let translation = '';
+      // Placeholder for DeepL translation -  Replace with actual DeepL integration
+      const useDeepL = localStorage.getItem('useDeepLTranslation') === 'true'; //Gets DeepL setting from local storage.
+      if (useDeepL) {
+        try {
+          translation = await deeplTranslate(message.text); // Placeholder function
+        } catch (translationError) {
+          console.error("DeepL translation failed:", translationError);
+          showErrorNotification("DeepL翻訳に失敗しました。");
+        }
+      }
+
+
       // データを保存（音声タイプ情報を含める）
       try {
         console.log(`音声データの保存を開始 - timestamp: ${new Date().toISOString()}`);
-        const audioId = await db.saveAudio(audioBlob, message.text, message.voiceType);
+        const audioId = await db.saveAudio(audioBlob, message.text, message.voiceType, translation);
         console.log('音声を保存しました。ID:', audioId, '- timestamp:', new Date().toISOString());
 
         // 正常に保存されたら保存内容を確認
@@ -218,35 +231,35 @@ function showSuccessNotification(message) {
 async function playAudioFromBlob(blob) {
   try {
     console.log('音声再生を開始します');
-    
+
     // 現在再生中の音声があれば停止
     if (currentAudio) {
       currentAudio.pause();
       currentAudio = null;
     }
-    
+
     // BlobからURLを作成
     const audioUrl = URL.createObjectURL(blob);
-    
+
     // 新しいAudioオブジェクトを作成
     currentAudio = new Audio(audioUrl);
-    
+
     // 再生状態を設定
     playbackState = 'loading';
-    
+
     // イベントリスナーを設定
     currentAudio.addEventListener('canplaythrough', () => {
       console.log('音声の読み込みが完了しました');
       playbackState = 'playing';
     });
-    
+
     currentAudio.addEventListener('ended', () => {
       console.log('音声の再生が終了しました');
       playbackState = 'idle';
       // URLを解放
       URL.revokeObjectURL(audioUrl);
     });
-    
+
     currentAudio.addEventListener('error', (e) => {
       console.error('音声再生中にエラーが発生しました:', e);
       playbackState = 'error';
@@ -254,11 +267,11 @@ async function playAudioFromBlob(blob) {
       // URLを解放
       URL.revokeObjectURL(audioUrl);
     });
-    
+
     // 音声を再生
     await currentAudio.play();
     console.log('音声の再生を開始しました');
-    
+
     return true;
   } catch (error) {
     console.error('音声再生中にエラーが発生しました:', error);
@@ -272,11 +285,11 @@ async function fetchAudio(url) {
   try {
     console.log('音声データを取得中:', url);
     const response = await fetch(url);
-    
+
     if (!response.ok) {
       throw new Error(`音声データの取得に失敗しました: ${response.status} ${response.statusText}`);
     }
-    
+
     const blob = await response.blob();
     console.log('音声データを取得しました:', blob.size, 'bytes');
     return blob;
@@ -289,4 +302,32 @@ async function fetchAudio(url) {
 // エラー通知を表示する関数（showErrorのエイリアス）
 function showErrorNotification(message) {
   showError(message);
+}
+
+//音声データの保存処理(翻訳機能追加)
+async function playAndSaveAudio(url, text, voiceType, translation = '') {
+  try {
+    showStatus('音声データを取得中...', 'info');
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`音声データの取得に失敗: ${response.status}`);
+    }
+    const audioBlob = await response.blob();
+    const db = AudioDatabase.getInstance();
+    const audioId = await db.saveAudio(audioBlob, text, voiceType, translation);
+    showStatus('音声データを保存しました', 'success');
+    playAudioFile(audioBlob);
+    return audioId;
+  } catch (error) {
+    console.error('音声の再生と保存に失敗:', error);
+    showStatus(`エラー: ${error.message}`, 'error');
+    return null;
+  }
+}
+
+// Placeholder for DeepL translation function
+async function deeplTranslate(text) {
+  // Replace this with actual DeepL API call
+  // ... DeepL API integration here ...
+  return "Translated Text (Placeholder)";
 }
