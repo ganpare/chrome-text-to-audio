@@ -50,9 +50,18 @@ async function exportAllToAnki(filteredAudios = []) {
       throw new Error('エクスポートする音声がありません');
     }
 
+    // JSZipライブラリを読み込む
+    const JSZip = window.JSZip;
+    if (!JSZip) {
+      throw new Error('ZIPライブラリが見つかりません');
+    }
+
+    // 新しいZIPアーカイブを作成
+    const zip = new JSZip();
+
     // タブ区切りテキストデータを準備
     let txtContent = '';
-    const mediaFiles = [];
+    let audioFilesCount = 0;
 
     // 各音声を処理
     for (const audio of filteredAudios) {
@@ -80,49 +89,29 @@ async function exportAllToAnki(filteredAudios = []) {
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
       txtContent += `${audio.text}\t${translation}\t[sound:${audioFileName}]\n`;
 
-      // 音声ファイルを追加
-      mediaFiles.push({
-        fileName: audioFileName,
-        blob: audioData
-      });
+      // 音声ファイルをZIPに追加
+      zip.file(audioFileName, audioData);
+      audioFilesCount++;
     }
 
-    // テキストファイルをダウンロード
-    const txtBlob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
-    const txtUrl = URL.createObjectURL(txtBlob);
-    const txtLink = document.createElement('a');
-    txtLink.href = txtUrl;
-    txtLink.download = `anki_import_all_${Date.now()}.txt`;
-    document.body.appendChild(txtLink);
-    txtLink.click();
-    document.body.removeChild(txtLink);
+    // テキストファイルをZIPに追加
+    const txtFileName = `anki_import_all_${Date.now()}.txt`;
+    zip.file(txtFileName, txtContent);
 
-    // 音声ファイルを順次ダウンロード（各ファイル間に少し間隔を空ける）
-    for (let i = 0; i < mediaFiles.length; i++) {
-      try {
-        const mediaFile = mediaFiles[i];
-        const audioUrl = URL.createObjectURL(mediaFile.blob);
-        const audioLink = document.createElement('a');
-        audioLink.href = audioUrl;
-        audioLink.download = mediaFile.fileName;
-        document.body.appendChild(audioLink);
-        audioLink.click();
-        document.body.removeChild(audioLink);
-        URL.revokeObjectURL(audioUrl);
+    // ZIPファイルを生成
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
 
-        // 特に多くのファイルがある場合は、ブラウザが詰まらないよう間隔を空ける
-        if (i < mediaFiles.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } catch (fileError) {
-        console.error(`ファイル ${i+1}/${mediaFiles.length} のダウンロード中にエラー:`, fileError);
-        // エラーが発生しても続行
-      }
-    }
+    // ZIPファイルをダウンロード
+    const zipUrl = URL.createObjectURL(zipBlob);
+    const zipLink = document.createElement('a');
+    zipLink.href = zipUrl;
+    zipLink.download = `anki_export_${Date.now()}.zip`;
+    document.body.appendChild(zipLink);
+    zipLink.click();
+    document.body.removeChild(zipLink);
+    URL.revokeObjectURL(zipUrl);
 
-    URL.revokeObjectURL(txtUrl);
-
-    showStatus(`${mediaFiles.length}件の音声データをタブ区切りテキスト形式でエクスポートしました。`, 'success');
+    showStatus(`${audioFilesCount}件の音声データと1件のテキストファイルをZIPアーカイブにエクスポートしました。`, 'success');
     return true;
   } catch (error) {
     handleError(error, 'Ankiエクスポートに失敗しました');
