@@ -79,9 +79,9 @@ async function exportAllToAnki(filteredAudios = []) {
       const timestamp = new Date(audio.timestamp).toISOString().split('T')[0];
       const audioFileName = `${textPrefix}_${timestamp}.wav`;
 
-      // タブ区切りの行を追加 (英語テキスト、日本語テキスト、音声ファイルパス)
+      // タブ区切りの行を追加 (英語テキスト、日本語テキスト、Ankiの[sound:ファイル名]形式)
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
-      txtContent += `${audio.text}\t${translation}\t${audioFileName}\n`;
+      txtContent += `${audio.text}\t${translation}\t[sound:${audioFileName}]\n`;
 
       // 音声ファイルを追加
       mediaFiles.push({
@@ -323,7 +323,7 @@ function createAudioItem(audio, query) {
 
       // タブ区切りテキストデータの作成（ヘッダー付き）
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
-      const txtContent = `英語テキスト\t日本語テキスト\t音声ファイルパス\n${audio.text}\t${translation}\t${audioFileName}`;
+      const txtContent = `英語テキスト\t日本語テキスト\t音声ファイルパス\n${audio.text}\t${translation}\t[sound:${audioFileName}]`;
       const txtBlob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
       const txtUrl = URL.createObjectURL(txtBlob);
 
