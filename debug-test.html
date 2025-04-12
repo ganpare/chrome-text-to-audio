@@ -1,0 +1,337 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Anki Export Debug</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    button {
+      padding: 10px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    #log {
+      height: 300px;
+      overflow-y: auto;
+      background-color: #f8f9fa;
+      padding: 10px;
+      border: 1px solid #ddd;
+      margin: 10px 0;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ankiエクスポート デバッグテスト</h1>
+  <p>このページはAnkiエクスポート機能を単体でテストするためのものです。</p>
+  
+  <button id="runTest">エクスポートテスト実行</button>
+  <div id="log"></div>
+  
+  <hr>
+  <h3>デバッグ手順:</h3>
+  <ol>
+    <li>「エクスポートテスト実行」ボタンをクリックします</li>
+    <li>ログをチェックして問題を特定します</li>
+    <li>ブラウザのコンソールも確認してください（右クリック→検証またはF12キー）</li>
+  </ol>
+
+  <script src="jszip.min.js"></script>
+  <script>
+    // コンソールログをキャプチャしてページに表示する
+    (function captureConsole() {
+      const log = document.getElementById('log');
+      const originalConsole = {
+        log: console.log,
+        error: console.error,
+        warn: console.warn,
+        info: console.info
+      };
+      
+      function addLogEntry(type, args) {
+        const timestamp = new Date().toISOString().slice(11, 23);
+        const div = document.createElement('div');
+        div.className = type;
+        div.innerHTML = `<span class="time">[${timestamp}]</span> <span class="${type}">[${type}]</span> ${Array.from(args).map(arg => {
+          if (typeof arg === 'object') {
+            try {
+              return JSON.stringify(arg);
+            } catch (e) {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ')}`;
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+        
+        // 元のコンソール関数も呼び出す
+        originalConsole[type].apply(console, args);
+      }
+      
+      console.log = function() { addLogEntry('log', arguments); };
+      console.error = function() { addLogEntry('error', arguments); };
+      console.warn = function() { addLogEntry('warn', arguments); };
+      console.info = function() { addLogEntry('info', arguments); };
+    })();
+
+    // テスト用のオーディオデータ
+    const testAudios = [
+      {
+        id: 1,
+        text: "Hello, this is a test audio file",
+        translation: "こんにちは、これはテスト音声ファイルです",
+        timestamp: Date.now(),
+        fileSize: 12345,
+        voiceType: "af_heart"
+      },
+      {
+        id: 2,
+        text: "The quick brown fox jumps over the lazy dog",
+        translation: "素早い茶色のキツネは怠け者の犬を飛び越える",
+        timestamp: Date.now() - 86400000, // 1日前
+        fileSize: 23456,
+        voiceType: "am_adam"
+      }
+    ];
+
+    // ダミー音声ファイル（WAV）を作成
+    function createDummyWavBlob() {
+      // 単純な正弦波を持つWAVファイルのヘッダとデータを作成
+      const sampleRate = 44100;
+      const seconds = 1;
+      
+      // WAVヘッダ
+      const headerView = new DataView(new ArrayBuffer(44));
+      
+      // "RIFF"識別子
+      headerView.setUint8(0, 'R'.charCodeAt(0));
+      headerView.setUint8(1, 'I'.charCodeAt(0));
+      headerView.setUint8(2, 'F'.charCodeAt(0));
+      headerView.setUint8(3, 'F'.charCodeAt(0));
+      
+      // ファイルサイズからRIFFヘッダサイズを引いた値（36 + PCMデータの長さ）
+      headerView.setUint32(4, 36 + sampleRate * seconds * 2, true);
+      
+      // "WAVE"形式
+      headerView.setUint8(8, 'W'.charCodeAt(0));
+      headerView.setUint8(9, 'A'.charCodeAt(0));
+      headerView.setUint8(10, 'V'.charCodeAt(0));
+      headerView.setUint8(11, 'E'.charCodeAt(0));
+      
+      // "fmt "チャンク
+      headerView.setUint8(12, 'f'.charCodeAt(0));
+      headerView.setUint8(13, 'm'.charCodeAt(0));
+      headerView.setUint8(14, 't'.charCodeAt(0));
+      headerView.setUint8(15, ' '.charCodeAt(0));
+      
+      // fmtチャンクのサイズ
+      headerView.setUint32(16, 16, true);
+      // オーディオフォーマット（1はPCM）
+      headerView.setUint16(20, 1, true);
+      // チャンネル数
+      headerView.setUint16(22, 1, true);
+      // サンプルレート
+      headerView.setUint32(24, sampleRate, true);
+      // バイトレート (サンプルレート * チャンネル数 * ビット深度 / 8)
+      headerView.setUint32(28, sampleRate * 1 * 16 / 8, true);
+      // ブロックアライン (チャンネル数 * ビット深度 / 8)
+      headerView.setUint16(32, 1 * 16 / 8, true);
+      // ビット深度
+      headerView.setUint16(34, 16, true);
+      
+      // "data"チャンク
+      headerView.setUint8(36, 'd'.charCodeAt(0));
+      headerView.setUint8(37, 'a'.charCodeAt(0));
+      headerView.setUint8(38, 't'.charCodeAt(0));
+      headerView.setUint8(39, 'a'.charCodeAt(0));
+      
+      // データチャンクのサイズ
+      headerView.setUint32(40, sampleRate * seconds * 2, true);
+      
+      // 音声データ（簡単な正弦波）
+      const samples = sampleRate * seconds;
+      const dataView = new DataView(new ArrayBuffer(samples * 2));
+      
+      for (let i = 0; i < samples; i++) {
+        // 440Hz（A4音）の正弦波を生成
+        const value = Math.sin(2 * Math.PI * 440 * i / sampleRate) * 0x7FFF;
+        dataView.setInt16(i * 2, value, true);
+      }
+      
+      // ヘッダとデータを結合
+      return new Blob([headerView.buffer, dataView.buffer], { type: "audio/wav" });
+    }
+
+    // テスト用のBlob追加
+    testAudios.forEach(audio => {
+      audio.blob = createDummyWavBlob();
+    });
+
+    // 一括Ankiエクスポート機能
+    async function exportAllToAnki(filteredAudios = []) {
+      try {
+        console.log("=== exportAllToAnki開始 ===");
+        console.log(`${filteredAudios.length}件のオーディオファイルをエクスポートします`);
+        
+        if (!filteredAudios || filteredAudios.length === 0) {
+          throw new Error('エクスポートする音声がありません');
+        }
+
+        // JSZipライブラリを読み込む
+        let JSZip;
+        try {
+          console.log("JSZipライブラリの読み込みを試行...");
+          console.log("window.JSZip:", window.JSZip ? "存在します" : "存在しません");
+          
+          JSZip = window.JSZip;
+          if (!JSZip) {
+            console.warn('window.JSZipが見つかりません。グローバルJSZipを試します。');
+            if (typeof jszip !== 'undefined') {
+              JSZip = jszip;
+              console.log("jszipが見つかりました");
+            } else if (typeof JSZip !== 'undefined') {
+              JSZip = JSZip;
+              console.log("グローバルJSZipが見つかりました");
+            }
+          }
+          
+          if (!JSZip) {
+            throw new Error('ZIPライブラリが見つかりません');
+          }
+          
+          console.log("JSZipライブラリの読み込み成功:", JSZip);
+          console.log("JSZipバージョン:", JSZip.version || '不明なバージョン');
+        } catch (error) {
+          console.error('JSZipの読み込みエラー:', error);
+          throw new Error('ZIPライブラリの初期化に失敗しました: ' + error.message);
+        }
+
+        // 新しいZIPアーカイブを作成
+        console.log("新しいZIPアーカイブを作成...");
+        const zip = new JSZip();
+        console.log("ZIPオブジェクト作成成功:", zip);
+
+        // タブ区切りテキストデータを準備
+        let txtContent = '';
+        let audioFilesCount = 0;
+
+        // 各音声を処理
+        for (const audio of filteredAudios) {
+          console.log(`音声ID ${audio.id} を処理中...`);
+          
+          // 音声Blobの確認
+          if (!audio.blob) {
+            console.warn(`音声ID ${audio.id} にblobがありません。スキップします。`);
+            continue;
+          }
+          
+          console.log(`音声ID ${audio.id} のblob確認:`, audio.blob.size, 'バイト,', audio.blob.type);
+          
+          // ファイル名を生成（テキストの先頭20文字を使用）
+          const textPrefix = audio.text 
+            ? audio.text.substring(0, 20).replace(/[^\w\s]/gi, '').trim() 
+            : 'audio';
+          const timestamp = new Date(audio.timestamp).toISOString().split('T')[0];
+          const audioFileName = `${textPrefix}_${timestamp}.wav`;
+
+          // タブ区切りの行を追加
+          const translation = audio.translation || ''; // 翻訳がない場合は空文字
+          txtContent += `${audio.text}\t${translation}\t[sound:${audioFileName}]\n`;
+
+          // 音声ファイルをZIPに追加
+          console.log(`音声ファイル "${audioFileName}" をZIPに追加...`);
+          zip.file(audioFileName, audio.blob);
+          audioFilesCount++;
+        }
+
+        // テキストファイルをZIPに追加
+        const txtFileName = `anki_import_all_${Date.now()}.txt`;
+        console.log(`テキストファイル "${txtFileName}" をZIPに追加...`);
+        zip.file(txtFileName, txtContent);
+
+        console.log('ZIPファイル生成開始...');
+        console.log('圧縮対象ファイル数:', audioFilesCount);
+        
+        try {
+          // ZIPファイルを生成
+          console.log('zip.generateAsync呼び出し前, zip:', zip);
+          console.log('zip.generateAsync存在確認:', typeof zip.generateAsync);
+          
+          const zipBlob = await zip.generateAsync({ 
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 5 }
+          });
+          
+          console.log('ZIPファイル生成完了:', zipBlob.size, 'バイト');
+
+          // ZIPファイルをダウンロード
+          const zipUrl = URL.createObjectURL(zipBlob);
+          console.log('URLオブジェクト作成:', zipUrl);
+          
+          const zipLink = document.createElement('a');
+          zipLink.href = zipUrl;
+          zipLink.download = `anki_export_${Date.now()}.zip`;
+          console.log('ダウンロードリンク作成:', zipLink.download);
+          
+          // 見えるように表示して、クリックのトラブルを回避
+          zipLink.style.display = 'block';
+          zipLink.textContent = 'ここをクリックしてZIPファイルをダウンロード';
+          zipLink.style.padding = '10px';
+          zipLink.style.margin = '20px 0';
+          zipLink.style.backgroundColor = '#f0f0f0';
+          zipLink.style.textAlign = 'center';
+          
+          document.body.appendChild(zipLink);
+          console.log('リンクをDOM追加完了');
+          
+          // クリックをトリガー
+          console.log('click()呼び出し前');
+          zipLink.click();
+          console.log('click()呼び出し完了');
+          
+          // リンクはそのままにして、ユーザーが手動でクリックできるようにする
+          console.log('ZIPファイルのダウンロードを開始しました');
+        } catch (zipError) {
+          console.error('ZIPファイル生成中のエラー:', zipError);
+          console.error('エラースタック:', zipError.stack);
+          throw zipError;
+        }
+
+        console.log(`${audioFilesCount}件の音声データと1件のテキストファイルをZIPアーカイブにエクスポートしました。`);
+        console.log("=== exportAllToAnki完了 ===");
+        return true;
+      } catch (error) {
+        console.error('Ankiエクスポートエラー:', error);
+        console.error('エラースタック:', error.stack);
+        return false;
+      }
+    }
+
+    // テスト実行
+    document.getElementById('runTest').addEventListener('click', async function() {
+      console.log('テストボタンがクリックされました');
+      await exportAllToAnki(testAudios);
+    });
+    
+    // 初期化
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('デバッグページが読み込まれました');
+      console.log('JSZip確認:', typeof JSZip !== 'undefined' ? 'ライブラリが読み込まれています' : 'ライブラリが読み込まれていません');
+    });
+  </script>
+</body>
+</html>

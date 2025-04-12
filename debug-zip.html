@@ -1,0 +1,305 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>JSZip Debug</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    button {
+      padding: 10px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    #status {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .info {
+      background-color: #d1ecf1;
+      color: #0c5460;
+    }
+    #log {
+      height: 300px;
+      overflow-y: auto;
+      background-color: #f8f9fa;
+      padding: 10px;
+      border: 1px solid #ddd;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>JSZip デバッグツール</h1>
+  <div id="controls">
+    <h2>テスト操作</h2>
+    <button id="checkJSZip">JSZipライブラリの確認</button>
+    <button id="createSimpleZip">シンプルZIPの作成</button>
+    <button id="createAudioZip">音声ZIPの作成（テストデータ）</button>
+  </div>
+
+  <div id="status"></div>
+  <div id="log"></div>
+  <hr>
+  <h3>環境情報：</h3>
+  <pre id="environment"></pre>
+
+  <script src="jszip.min.js"></script>
+  <script>
+    // ログ表示関数
+    function log(message, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const timestamp = new Date().toISOString().substring(11, 23);
+      const entry = document.createElement('div');
+      entry.className = type;
+      entry.innerHTML = `[${timestamp}] ${message}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // ステータスメッセージを表示
+    function showStatus(message, type = '') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = type;
+    }
+
+    // 環境情報の表示
+    function displayEnvironment() {
+      const env = {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        jsZipVersion: window.JSZip ? 'Available' : 'Not Available'
+      };
+      document.getElementById('environment').textContent = JSON.stringify(env, null, 2);
+    }
+
+    // JSZipライブラリの確認
+    document.getElementById('checkJSZip').addEventListener('click', function() {
+      try {
+        log('JSZipライブラリの確認を開始...');
+        
+        if (typeof JSZip === 'undefined') {
+          throw new Error('JSZipがグローバルスコープに読み込まれていません');
+        }
+        
+        log(`JSZipのバージョン: ${JSZip.version || 'Unknown'}`, 'success');
+        showStatus('JSZipは正常に読み込まれています', 'success');
+      } catch (error) {
+        log(`エラー: ${error.message}`, 'error');
+        showStatus(`エラーが発生しました: ${error.message}`, 'error');
+      }
+    });
+
+    // シンプルなZIPファイル作成のテスト
+    document.getElementById('createSimpleZip').addEventListener('click', async function() {
+      try {
+        log('シンプルZIPファイルの作成を開始...');
+        
+        if (typeof JSZip === 'undefined') {
+          throw new Error('JSZipがグローバルスコープに読み込まれていません');
+        }
+        
+        const zip = new JSZip();
+        log('ZIPオブジェクトを作成しました');
+        
+        // テキストファイルを追加
+        zip.file('hello.txt', 'Hello World!\nこんにちは世界！');
+        log('テキストファイルをZIPに追加しました');
+        
+        // フォルダとファイルを追加
+        const folder = zip.folder('test_folder');
+        folder.file('test.txt', 'This is a test file in a folder.');
+        log('フォルダとファイルをZIPに追加しました');
+        
+        log('ZIPファイルの生成を開始...');
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 5 }
+        });
+        log(`ZIPファイル生成完了: ${zipBlob.size} バイト`, 'success');
+        
+        // ZIPファイルをダウンロード
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const zipLink = document.createElement('a');
+        zipLink.href = zipUrl;
+        zipLink.download = `simple_test_${Date.now()}.zip`;
+        log(`ダウンロードリンク作成: ${zipLink.download}`);
+        
+        document.body.appendChild(zipLink);
+        log('リンクをDOM追加完了');
+        
+        zipLink.click();
+        log('click()呼び出し完了');
+        
+        setTimeout(() => {
+          document.body.removeChild(zipLink);
+          URL.revokeObjectURL(zipUrl);
+          log('クリーンアップ完了');
+        }, 1000);
+        
+        showStatus('ZIPファイルを生成しダウンロードしました', 'success');
+      } catch (error) {
+        log(`エラー: ${error.message}`, 'error');
+        showStatus(`エラーが発生しました: ${error.message}`, 'error');
+      }
+    });
+
+    // 音声ファイル入りZIPファイル作成のテスト
+    document.getElementById('createAudioZip').addEventListener('click', async function() {
+      try {
+        log('音声ZIPファイルの作成を開始...');
+        
+        if (typeof JSZip === 'undefined') {
+          throw new Error('JSZipがグローバルスコープに読み込まれていません');
+        }
+        
+        const zip = new JSZip();
+        log('ZIPオブジェクトを作成しました');
+        
+        // テキストファイルを追加
+        const txtContent = 'Hello World\tこんにちは世界\t[sound:test_audio.wav]\nTest audio\tテスト音声\t[sound:test_audio_2.wav]';
+        zip.file('anki_import.txt', txtContent);
+        log('テキストファイルをZIPに追加しました');
+        
+        // ダミー音声ファイルを追加（簡単な波形データ）
+        function createDummyWavBlob() {
+          // 単純な正弦波を持つWAVファイルのヘッダとデータを作成
+          const sampleRate = 44100;
+          const seconds = 1;
+          
+          // WAVヘッダ
+          const headerView = new DataView(new ArrayBuffer(44));
+          
+          // "RIFF"識別子
+          headerView.setUint8(0, 'R'.charCodeAt(0));
+          headerView.setUint8(1, 'I'.charCodeAt(0));
+          headerView.setUint8(2, 'F'.charCodeAt(0));
+          headerView.setUint8(3, 'F'.charCodeAt(0));
+          
+          // ファイルサイズからRIFFヘッダサイズを引いた値（36 + PCMデータの長さ）
+          headerView.setUint32(4, 36 + sampleRate * seconds * 2, true);
+          
+          // "WAVE"形式
+          headerView.setUint8(8, 'W'.charCodeAt(0));
+          headerView.setUint8(9, 'A'.charCodeAt(0));
+          headerView.setUint8(10, 'V'.charCodeAt(0));
+          headerView.setUint8(11, 'E'.charCodeAt(0));
+          
+          // "fmt "チャンク
+          headerView.setUint8(12, 'f'.charCodeAt(0));
+          headerView.setUint8(13, 'm'.charCodeAt(0));
+          headerView.setUint8(14, 't'.charCodeAt(0));
+          headerView.setUint8(15, ' '.charCodeAt(0));
+          
+          // fmtチャンクのサイズ
+          headerView.setUint32(16, 16, true);
+          // オーディオフォーマット（1はPCM）
+          headerView.setUint16(20, 1, true);
+          // チャンネル数
+          headerView.setUint16(22, 1, true);
+          // サンプルレート
+          headerView.setUint32(24, sampleRate, true);
+          // バイトレート (サンプルレート * チャンネル数 * ビット深度 / 8)
+          headerView.setUint32(28, sampleRate * 1 * 16 / 8, true);
+          // ブロックアライン (チャンネル数 * ビット深度 / 8)
+          headerView.setUint16(32, 1 * 16 / 8, true);
+          // ビット深度
+          headerView.setUint16(34, 16, true);
+          
+          // "data"チャンク
+          headerView.setUint8(36, 'd'.charCodeAt(0));
+          headerView.setUint8(37, 'a'.charCodeAt(0));
+          headerView.setUint8(38, 't'.charCodeAt(0));
+          headerView.setUint8(39, 'a'.charCodeAt(0));
+          
+          // データチャンクのサイズ
+          headerView.setUint32(40, sampleRate * seconds * 2, true);
+          
+          // 音声データ（簡単な正弦波）
+          const samples = sampleRate * seconds;
+          const dataView = new DataView(new ArrayBuffer(samples * 2));
+          
+          for (let i = 0; i < samples; i++) {
+            // 440Hz（A4音）の正弦波を生成
+            const value = Math.sin(2 * Math.PI * 440 * i / sampleRate) * 0x7FFF;
+            dataView.setInt16(i * 2, value, true);
+          }
+          
+          // ヘッダとデータを結合
+          const blob = new Blob([headerView.buffer, dataView.buffer], { type: "audio/wav" });
+          return blob;
+        }
+        
+        // ダミー音声ファイルを作成
+        const dummyWav1 = createDummyWavBlob();
+        const dummyWav2 = createDummyWavBlob();
+        
+        // ZIPに音声ファイルを追加
+        zip.file('test_audio.wav', dummyWav1);
+        zip.file('test_audio_2.wav', dummyWav2);
+        log('音声ファイルをZIPに追加しました');
+        
+        log('ZIPファイルの生成を開始...');
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 5 }
+        });
+        log(`ZIPファイル生成完了: ${zipBlob.size} バイト`, 'success');
+        
+        // ZIPファイルをダウンロード
+        const zipUrl = URL.createObjectURL(zipBlob);
+        const zipLink = document.createElement('a');
+        zipLink.href = zipUrl;
+        zipLink.download = `anki_test_${Date.now()}.zip`;
+        log(`ダウンロードリンク作成: ${zipLink.download}`);
+        
+        document.body.appendChild(zipLink);
+        log('リンクをDOM追加完了');
+        
+        zipLink.click();
+        log('click()呼び出し完了');
+        
+        setTimeout(() => {
+          document.body.removeChild(zipLink);
+          URL.revokeObjectURL(zipUrl);
+          log('クリーンアップ完了');
+        }, 1000);
+        
+        showStatus('音声ZIPファイルを生成しダウンロードしました', 'success');
+      } catch (error) {
+        log(`エラー: ${error.stack || error.message}`, 'error');
+        showStatus(`エラーが発生しました: ${error.message}`, 'error');
+      }
+    });
+
+    // 初期化
+    document.addEventListener('DOMContentLoaded', function() {
+      log('デバッグページを読み込みました');
+      displayEnvironment();
+    });
+  </script>
+</body>
+</html>
