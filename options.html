@@ -85,45 +85,13 @@
         保存済み音声一覧
       </h2>
       <div class="audio-list-actions">
-        <div class="search-bar">-bar">
+        <div class="search-bar">
           <i class="material-icons">search</i>
           <input type="text" id="searchInput" placeholder="テキストを検索...">
         </div>
         <div class="filter-controls">
           <select id="voiceFilter" class="filter-select">
             <option value="">すべての音声タイプ</option>
-            <optgroup label="女性の声">
-              <option value="af_heart">Heart Voice</option>
-              <option value="af_alloy">Alloy Voice</option>
-              <option value="af_nova">Nova Voice</option>
-              <option value="af_shimmer">Shimmer Voice</option>
-            </optgroup>
-            <optgroup label="男性の声">
-              <option value="am_echo">Echo Voice</option>
-              <option value="am_fable">Fable Voice</option>
-              <option value="am_onyx">Onyx Voice</option>
-            </optgroup>
-          </select>
-          <select id="sortOrder" class="filter-select">
-            <option value="newest">新しい順</option>
-            <option value="oldest">古い順</option>
-            <option value="largest">サイズ大きい順</option>
-            <option value="smallest">サイズ小さい順</option>
-          </select>
-        </div>
-        <button id="ankiExportAllButton" class="anki-export-button" title="選択した音声をAnkiでインポート可能な形式でエクスポートします">
-          <i class="material-icons">school</i>
-          Ankiエクスポート
-        </button>
-        <button id="refreshButton" class="refresh-button">
-          <i class="material-icons">refresh</i>
-          更新
-        </button>rch</i>
-          <input type="text" id="searchInput" placeholder="テキストを検索...">
-        </div>
-        <div class="filter-controls">
-          <select id="voiceFilter" class="filter-select">
-            <option value="">全ての音声タイプ</option>
             <optgroup label="女性の声">
               <option value="af_heart">Heart Voice</option>
               <option value="af_alloy">Alloy Voice</option>
@@ -156,6 +124,10 @@
             <option value="smallest">サイズ小さい順</option>
           </select>
         </div>
+        <button id="ankiExportAllButton" class="anki-export-button" title="選択した音声をAnkiでインポート可能な形式でエクスポートします">
+          <i class="material-icons">school</i>
+          Ankiエクスポート
+        </button>
         <button id="refreshButton" class="refresh-button">
           <i class="material-icons">refresh</i>
           更新
