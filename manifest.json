@@ -1,5 +1,8 @@
 {
   "manifest_version": 3,
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
   "name": "Kokoro TTS Reader",
   "version": "1.1.0",
   "author": "sungo",

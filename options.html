@@ -145,10 +145,19 @@
   <script src="jszip.min.js"></script>
   <script>
     // JSZipがグローバルに利用可能か確認
-    if (typeof JSZip === 'undefined') {
-      console.warn('JSZipがグローバルスコープに読み込まれていません。window.JSZipを定義します。');
-      window.JSZip = window.jszip || window.JSZip;
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+      // グローバルスコープのJSZipを確認
+      console.log('JSZip確認:', typeof JSZip !== 'undefined' ? 'グローバルに存在します' : '存在しません');
+      console.log('window.JSZip確認:', typeof window.JSZip !== 'undefined' ? '存在します' : '存在しません');
+      
+      // グローバル変数として明示的に設定
+      if (typeof JSZip !== 'undefined') {
+        window.JSZip = JSZip;
+        console.log('JSZipをwindowオブジェクトに設定しました');
+      } else {
+        console.error('JSZipライブラリが見つかりません');
+      }
+    });
   </script>
   <script src="options.js"></script>
 </body>

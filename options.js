@@ -53,14 +53,48 @@ async function exportAllToAnki(filteredAudios = []) {
     // JSZipライブラリを読み込む
     let JSZip;
     try {
-      JSZip = window.JSZip;
-      if (!JSZip) {
-        console.error('window.JSZipが見つかりません。直接JSZipを試します。');
-        JSZip = jszip;
+      // ブラウザ環境における参照方法を複数試行
+      if (typeof window.JSZip !== 'undefined') {
+        console.log('window.JSZipが見つかりました');
+        JSZip = window.JSZip;
+      } else if (typeof JSZip !== 'undefined') {
+        console.log('グローバルJSZipが見つかりました');
+        JSZip = JSZip;
+        // windowオブジェクトにも設定
+        window.JSZip = JSZip;
+      } else {
+        // スクリプトを動的に読み込み
+        console.log('JSZipが見つかりません。動的にロードします');
+        const script = document.createElement('script');
+        script.src = 'jszip.min.js';
+        script.async = false;
+        document.head.appendChild(script);
+        
+        // スクリプトロード後に再試行
+        await new Promise((resolve, reject) => {
+          script.onload = () => {
+            if (typeof window.JSZip !== 'undefined') {
+              JSZip = window.JSZip;
+              console.log('JSZipを動的にロードしました');
+              resolve();
+            } else if (typeof JSZip !== 'undefined') {
+              JSZip = JSZip;
+              window.JSZip = JSZip;
+              console.log('JSZipを動的にロードしました');
+              resolve();
+            } else {
+              reject(new Error('JSZipライブラリをロードできませんでした'));
+            }
+          };
+          script.onerror = () => reject(new Error('JSZipスクリプトの読み込みに失敗しました'));
+        });
       }
+      
       if (!JSZip) {
         throw new Error('ZIPライブラリが見つかりません');
       }
+      
+      console.log('JSZipの初期化成功:', JSZip.version || 'バージョン不明');
     } catch (error) {
       console.error('JSZipの読み込みエラー:', error);
       throw new Error('ZIPライブラリの初期化に失敗しました: ' + error.message);
