@@ -1,0 +1,29 @@
+Translating text: "This page will walk you throug..."
+background.js:56 Sending request to DeepL API: https://api-free.deepl.com/v2/translate
+background.js:73 DeepL API response status: 200
+background.js:82 DeepL API response data: Object
+background.js:86 Translation successful: このページでは、サーバーコンポーネントとクライアントコンポーネントでデータを取得する方法を説明します。また、データに依存するコンテンツをストリーミングする方法についても説明します。
+background.js:396 Translation result: このページでは、サーバーコンポーネントとクライアントコンポーネントでデータを取得する方法を説明します。また、データに依存するコンテンツをストリーミングする方法についても説明します。
+background.js:239 Received message in background script: Object from sender: Object
+background.js:242 Processing refresh request, timestamp: 1744503278727
+background.js:275 Found active page tabs: 0
+background.js:278 No active pages found
+background.js:253 Page refresh results: Object
+options.html:146 Refused to execute inline script because it violates the following Content Security Policy directive: "script-src 'self'". Either the 'unsafe-inline' keyword, a hash ('sha256-MUycqmFXYqEjWgMvu6cDUw2336qqWJnGLRiVla6OsxM='), or a nonce ('nonce-...') is required to enable inline execution.
+Understand this error
+options.html:146 Refused to execute inline script because it violates the following Content Security Policy directive: "script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules' http://localhost:* http://127.0.0.1:*". Either the 'unsafe-inline' keyword, a hash ('sha256-MUycqmFXYqEjWgMvu6cDUw2336qqWJnGLRiVla6OsxM='), or a nonce ('nonce-...') is required to enable inline execution.
+Understand this error
+dbHelper.js:11 Created new AudioDatabase instance
+dbHelper.js:18 Chrome Storage API is already available
+dbHelper.js:93 Getting audio list...
+dbHelper.js:98 Retrieved 2 audio records
+dbHelper.js:93 Getting audio list...
+dbHelper.js:98 Retrieved 2 audio records
+dbHelper.js:93 Getting audio list...
+dbHelper.js:98 Retrieved 2 audio records
+options.js:67 JSZipが見つかりません。動的にロードします
+dbHelper.js:93 Getting audio list...
+options.js:99 JSZipの読み込みエラー: Error: JSZipライブラリをロードできませんでした
+    at script.onload (options.js:86:22)
+exportAllToAnki @ options.js:99Understand this error
+dbHelper.js:98 Retrieved 2 audio records
