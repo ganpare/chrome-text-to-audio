@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>シンプルZIP生成テスト</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    button {
+      padding: 10px;
+      margin: 10px 0;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #status {
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .success { background-color: #d4edda; color: #155724; }
+    .error { background-color: #f8d7da; color: #721c24; }
+    #log {
+      height: 300px;
+      overflow-y: auto;
+      background-color: #f5f5f5;
+      padding: 10px;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h1>シンプルZIP生成テスト</h1>
+  <p>JSZipライブラリの基本機能をテストします</p>
+  
+  <div>
+    <button id="createSimpleZip">シンプルZIPファイル作成</button>
+    <button id="createTextZip">テキストファイルのみのZIP作成</button>
+  </div>
+  
+  <div id="status"></div>
+  <div id="log"></div>
+  
+  <script src="jszip.min.js"></script>
+  <script>
+    // ログ表示関数
+    function log(message) {
+      const logDiv = document.getElementById('log');
+      const timestamp = new Date().toTimeString().split(' ')[0];
+      const entry = document.createElement('div');
+      entry.textContent = `[${timestamp}] ${message}`;
+      logDiv.appendChild(entry);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(message);
+    }
+    
+    // ステータス表示
+    function showStatus(message, type) {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = type || '';
+    }
+    
+    // ページ読み込み時の処理
+    document.addEventListener('DOMContentLoaded', function() {
+      log('ページ読み込み完了');
+      
+      if (typeof JSZip === 'undefined') {
+        log('エラー: JSZipが読み込まれていません');
+        showStatus('JSZipライブラリが見つかりません', 'error');
+      } else {
+        log(`JSZipバージョン: ${JSZip.version}`);
+        showStatus('JSZipライブラリが読み込まれました', 'success');
+      }
+    });
+    
+    // シンプルZIPファイル作成
+    document.getElementById('createSimpleZip').addEventListener('click', async function() {
+      try {
+        log('シンプルZIPファイル作成開始');
+        showStatus('ZIPファイル作成中...', '');
+        
+        // 新しいZIPを作成
+        const zip = new JSZip();
+        log('ZIPオブジェクト作成成功');
+        
+        // テキストファイルを追加
+        zip.file('hello.txt', 'Hello World!\nこんにちは世界！');
+        log('テキストファイル追加完了');
+        
+        // 簡単な小さいデータをバイナリとして追加
+        const binaryData = new Uint8Array([0, 1, 2, 3, 4, 5]);
+        zip.file('binary.dat', binaryData);
+        log('バイナリファイル追加完了');
+        
+        // ZIPファイル生成
+        log('ZIPファイル生成開始');
+        const blob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 1 }
+        });
+        log(`ZIPファイル生成完了: ${blob.size} バイト`);
+        
+        // ダウンロード
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'simple-test.zip';
+        document.body.appendChild(a);
+        log('ダウンロードリンク作成完了');
+        
+        a.click();
+        log('ダウンロード開始');
+        
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          log('クリーンアップ完了');
+        }, 1000);
+        
+        showStatus('ZIPファイル作成成功', 'success');
+      } catch (error) {
+        log(`エラー: ${error.message}`);
+        console.error('詳細エラー:', error);
+        showStatus(`ZIPファイル作成エラー: ${error.message}`, 'error');
+      }
+    });
+    
+    // テキストファイルのみのZIP作成
+    document.getElementById('createTextZip').addEventListener('click', async function() {
+      try {
+        log('テキストファイルのみのZIP作成開始');
+        showStatus('ZIPファイル作成中...', '');
+        
+        // 新しいZIPを作成
+        const zip = new JSZip();
+        
+        // テキストファイルのみ追加（音声なし）
+        for (let i = 1; i <= 5; i++) {
+          zip.file(`text${i}.txt`, `これはテストファイル ${i} です。\nThis is test file ${i}.`);
+        }
+        log('5つのテキストファイル追加完了');
+        
+        // ZIPファイル生成
+        log('ZIPファイル生成開始');
+        const blob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 1 }
+        });
+        log(`ZIPファイル生成完了: ${blob.size} バイト`);
+        
+        // ダウンロード
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'text-only.zip';
+        document.body.appendChild(a);
+        
+        a.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+        
+        showStatus('テキストZIP作成成功', 'success');
+      } catch (error) {
+        log(`エラー: ${error.message}`);
+        console.error('詳細エラー:', error);
+        showStatus(`ZIPファイル作成エラー: ${error.message}`, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

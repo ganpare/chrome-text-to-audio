@@ -53,7 +53,7 @@ async function exportAllToAnki(filteredAudios = []) {
     // JSZipライブラリが読み込まれているか確認
     if (typeof JSZip === 'undefined') {
       console.log('JSZipが見つかりません。読み込みを試みます');
-      
+
       try {
         // 明示的にJSZipを読み込み
         await new Promise((resolve, reject) => {
@@ -73,34 +73,46 @@ async function exportAllToAnki(filteredAudios = []) {
         throw new Error('ZIPライブラリの読み込みに失敗しました: ' + error.message);
       }
     }
-    
+
     // 再度確認
     if (typeof JSZip === 'undefined') {
       throw new Error('JSZipライブラリが利用できません');
     }
-    
+
     console.log('JSZipの初期化成功:', JSZip.version || 'バージョン不明');
 
-    // 新しいZIPアーカイブを作成
+    console.log('JSZipバージョン確認:', JSZip.version);
+
+    // 新しいZIPを作成
+    console.log('新しいZIPオブジェクトを作成中...');
     const zip = new JSZip();
+    console.log('ZIPオブジェクト作成成功:', typeof zip, '生成メソッド存在確認:', typeof zip.generateAsync);
 
     // タブ区切りテキストデータを準備
     let txtContent = '';
     let audioFilesCount = 0;
 
+    console.log('フィルタ済み音声数:', filteredAudios.length);
+
     // 各音声を処理
-    for (const audio of filteredAudios) {
+    for (let i = 0; i < filteredAudios.length; i++) {
+      const audio = filteredAudios[i];
+      console.log(`音声処理中... ${i+1}/${filteredAudios.length} (ID: ${audio.id})`);
+
       // 音声データをblobとして取得
       let audioData;
       if (audio.blob) {
+        console.log(`音声ID ${audio.id} はすでにblob形式です。サイズ: ${audio.blob.size} バイト`);
         audioData = audio.blob;
       } else {
+        console.log(`音声ID ${audio.id} のblob形式を取得中...`);
         const fullAudio = await db.getAudio(audio.id);
         if (!fullAudio || !fullAudio.blob) {
           console.warn(`音声ID ${audio.id} のblobデータが見つかりません。スキップします。`);
           continue;
         }
         audioData = fullAudio.blob;
+        console.log(`音声ID ${audio.id} のblob取得成功。サイズ: ${audioData.size} バイト`);
       }
 
       // ファイル名を生成（テキストの先頭20文字を使用）
@@ -109,52 +121,67 @@ async function exportAllToAnki(filteredAudios = []) {
         : 'audio';
       const timestamp = new Date(audio.timestamp).toISOString().split('T')[0];
       const audioFileName = `${textPrefix}_${timestamp}.wav`;
+      console.log(`ファイル名生成: "${audioFileName}"`);
 
       // タブ区切りの行を追加 (英語テキスト、日本語テキスト、Ankiの[sound:ファイル名]形式)
       const translation = audio.translation || ''; // 翻訳がない場合は空文字
       txtContent += `${audio.text}\t${translation}\t[sound:${audioFileName}]\n`;
 
       // 音声ファイルをZIPに追加
-      zip.file(audioFileName, audioData);
-      audioFilesCount++;
+      console.log(`ZIPに音声ファイル "${audioFileName}" を追加中... (サイズ: ${audioData.size} バイト)`);
+      try {
+        zip.file(audioFileName, audioData);
+        console.log(`音声ファイル "${audioFileName}" を追加完了`);
+        audioFilesCount++;
+      } catch (fileError) {
+        console.error(`音声ファイル "${audioFileName}" の追加に失敗:`, fileError);
+      }
     }
 
     // テキストファイルをZIPに追加
     const txtFileName = `anki_import_all_${Date.now()}.txt`;
+    console.log(`テキストファイル "${txtFileName}" をZIPに追加中... (サイズ: ${txtContent.length} バイト)`);
     zip.file(txtFileName, txtContent);
+    console.log(`テキストファイル追加完了`);
 
     console.log('ZIPファイル生成開始...');
     console.log('圧縮対象ファイル数:', audioFilesCount);
-    
+
     try {
       // ZIPファイルを生成
-      console.log('zip.generateAsync呼び出し前');
+      console.log('zip.generateAsync呼び出し前...');
+      console.log('ZIPオブジェクト状態:', 
+                 'ファイル数:', Object.keys(zip.files).length, 
+                 'generateAsyncメソッド:', typeof zip.generateAsync);
+
+      // 低レベルの圧縮設定で試行
+      console.log('ZIPファイル生成開始（低圧縮設定）...');
       const zipBlob = await zip.generateAsync({ 
         type: 'blob',
         compression: 'DEFLATE',
-        compressionOptions: { level: 5 }
+        compressionOptions: { level: 1 } // 圧縮レベルを下げる
       });
       console.log('ZIPファイル生成完了:', zipBlob.size, 'バイト');
 
       // ZIPファイルをダウンロード
       const zipUrl = URL.createObjectURL(zipBlob);
       console.log('URLオブジェクト作成:', zipUrl);
-      
+
       const zipLink = document.createElement('a');
       zipLink.href = zipUrl;
       zipLink.download = `anki_export_${Date.now()}.zip`;
       console.log('ダウンロードリンク作成:', zipLink.download);
-      
+
       // 見えるように表示して、クリックのトラブルを回避
       zipLink.style.display = 'none';
       document.body.appendChild(zipLink);
       console.log('リンクをDOM追加完了');
-      
+
       // クリックをトリガー
       console.log('click()呼び出し前');
       zipLink.click();
       console.log('click()呼び出し完了');
-      
+
       // 少し待ってからクリーンアップ（即時削除だとダウンロードが始まらないことがある）
       setTimeout(() => {
         document.body.removeChild(zipLink);
