@@ -148,46 +148,61 @@ async function exportAllToAnki(filteredAudios = []) {
     console.log('圧縮対象ファイル数:', audioFilesCount);
 
     try {
-      // ZIPファイルを生成
-      console.log('zip.generateAsync呼び出し前...');
-      console.log('ZIPオブジェクト状態:', 
-                 'ファイル数:', Object.keys(zip.files).length, 
-                 'generateAsyncメソッド:', typeof zip.generateAsync);
+      // シンプル化されたZIPファイル生成処理
+      console.log('ZIPオブジェクト状態確認:', 
+               'ファイル数:', Object.keys(zip.files).length, 
+               'generateAsyncメソッド存在:', typeof zip.generateAsync === 'function');
 
-      // 低レベルの圧縮設定で試行
-      console.log('ZIPファイル生成開始（低圧縮設定）...');
+      // まず、小さなテストを行う - テキストファイルだけを含むZIPを生成
+      console.log('テキストファイルのみでZIP生成テスト...');
+      const testZip = new JSZip();
+      testZip.file('test.txt', 'テストファイル内容');
+
+      console.log('テストZIP生成中...');
+      const testBlob = await testZip.generateAsync({
+        type: 'blob',
+        compression: 'STORE', // 圧縮なし
+      });
+      console.log('テストZIP生成成功:', testBlob.size, 'バイト');
+
+      // 実際のZIP生成 - 圧縮レベルを無効化
+      console.log('実際のZIPファイル生成開始（圧縮なし）...');
       const zipBlob = await zip.generateAsync({ 
         type: 'blob',
-        compression: 'DEFLATE',
-        compressionOptions: { level: 1 } // 圧縮レベルを下げる
+        compression: 'STORE', // 圧縮なし - 問題を回避するため
       });
       console.log('ZIPファイル生成完了:', zipBlob.size, 'バイト');
 
-      // ZIPファイルをダウンロード
+      // ZIPファイルをダウンロード - より明示的なステップ
+      console.log('ダウンロードリンク生成中...');
       const zipUrl = URL.createObjectURL(zipBlob);
-      console.log('URLオブジェクト作成:', zipUrl);
 
       const zipLink = document.createElement('a');
       zipLink.href = zipUrl;
       zipLink.download = `anki_export_${Date.now()}.zip`;
-      console.log('ダウンロードリンク作成:', zipLink.download);
-
-      // 見えるように表示して、クリックのトラブルを回避
-      zipLink.style.display = 'none';
+      zipLink.textContent = 'ダウンロード'; // デバッグ用に見えるようにする
+      zipLink.style.position = 'fixed';
+      zipLink.style.top = '10px';
+      zipLink.style.right = '10px';
+      zipLink.style.zIndex = '9999';
+      zipLink.style.background = 'green';
+      zipLink.style.color = 'white';
+      zipLink.style.padding = '5px';
       document.body.appendChild(zipLink);
-      console.log('リンクをDOM追加完了');
+      console.log('リンクをDOM追加完了 - 見えるようにしました');
 
-      // クリックをトリガー
-      console.log('click()呼び出し前');
+      // クリックイベント
+      console.log('click()呼び出し');
       zipLink.click();
-      console.log('click()呼び出し完了');
 
-      // 少し待ってからクリーンアップ（即時削除だとダウンロードが始まらないことがある）
+      // 少し長めに待ってからクリーンアップ
       setTimeout(() => {
         document.body.removeChild(zipLink);
         URL.revokeObjectURL(zipUrl);
         console.log('クリーンアップ完了');
-      }, 1000);
+      }, 3000); // 3秒待つ
+
+
     } catch (zipError) {
       console.error('ZIPファイル生成中のエラー:', zipError);
       showStatus(`ZIPファイル生成エラー: ${zipError.message}`, 'error');
@@ -628,8 +643,8 @@ async function updateTranslation(audioId, newTranslation) {
     showStatus('翻訳を更新しました', 'success');
     return true;
   } catch (error) {
-    handleError(error, '翻訳の更新に失敗しました');
-    return false;
+      handleError(error, '翻訳の更新に失敗しました');
+      return false;
   }
 }
 
