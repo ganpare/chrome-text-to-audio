@@ -143,22 +143,7 @@
 
   <script src="dbHelper.js"></script>
   <script src="jszip.min.js"></script>
-  <script>
-    // JSZipがグローバルに利用可能か確認
-    document.addEventListener('DOMContentLoaded', function() {
-      // グローバルスコープのJSZipを確認
-      console.log('JSZip確認:', typeof JSZip !== 'undefined' ? 'グローバルに存在します' : '存在しません');
-      console.log('window.JSZip確認:', typeof window.JSZip !== 'undefined' ? '存在します' : '存在しません');
-      
-      // グローバル変数として明示的に設定
-      if (typeof JSZip !== 'undefined') {
-        window.JSZip = JSZip;
-        console.log('JSZipをwindowオブジェクトに設定しました');
-      } else {
-        console.error('JSZipライブラリが見つかりません');
-      }
-    });
-  </script>
+  <!-- JSZipは外部スクリプトで読み込みます -->
   <script src="options.js"></script>
 </body>
 </html>
